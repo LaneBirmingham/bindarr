@@ -18,19 +18,22 @@ const {
 } = await import('./games.js');
 
 // --- Default: all games shown -------------------------------------------------
-assert.deepStrictEqual(enabledGames(), ['pokemon', 'mtg', 'lorcana']);
-assert.ok(showGamePicker(), 'three games means the picker is worth showing');
-assert.strictEqual(gameOptions().length, 3);
+assert.deepStrictEqual(enabledGames(), ['pokemon', 'mtg', 'lorcana', 'riftbound']);
+assert.ok(showGamePicker(), 'four games means the picker is worth showing');
+assert.strictEqual(gameOptions().length, 4);
 assert.strictEqual(defaultGameFilter(), '', "'all games' is meaningful with multiple shown");
 
-// --- Hiding MTG & Lorcana -----------------------------------------------------
+// --- Hiding the other games ---------------------------------------------------
 assert.strictEqual(setGameEnabled('mtg', false), true);
-assert.deepStrictEqual(enabledGames(), ['pokemon', 'lorcana']);
+assert.deepStrictEqual(enabledGames(), ['pokemon', 'lorcana', 'riftbound']);
 assert.ok(isGameEnabled('pokemon'));
 assert.ok(!isGameEnabled('mtg'));
 assert.ok(isGameEnabled('lorcana'));
 
 assert.strictEqual(setGameEnabled('lorcana', false), true);
+assert.deepStrictEqual(enabledGames(), ['pokemon', 'riftbound']);
+assert.ok(isGameEnabled('riftbound'));
+assert.strictEqual(setGameEnabled('riftbound', false), true);
 assert.deepStrictEqual(enabledGames(), ['pokemon']);
 assert.ok(!showGamePicker(), 'one game means every picker hides');
 assert.deepStrictEqual(gameOptions().map(g => g.value), ['pokemon']);
@@ -50,20 +53,23 @@ assert.deepStrictEqual(enabledGames(), ['pokemon'], 'state unchanged after the r
 // --- Re-enabling brings it back -----------------------------------------------
 assert.strictEqual(setGameEnabled('mtg', true), true);
 assert.strictEqual(setGameEnabled('lorcana', true), true);
-assert.deepStrictEqual(enabledGames(), ['pokemon', 'mtg', 'lorcana']);
+assert.strictEqual(setGameEnabled('riftbound', true), true);
+assert.deepStrictEqual(enabledGames(), ['pokemon', 'mtg', 'lorcana', 'riftbound']);
 assert.ok(showGamePicker());
 
 // --- A corrupt stored value must not hide the whole app -----------------------
 store.set('hidden_games', 'not json');
-assert.deepStrictEqual(enabledGames(), ['pokemon', 'mtg', 'lorcana'], 'malformed value falls back to showing everything');
-store.set('hidden_games', JSON.stringify(['pokemon', 'mtg', 'lorcana', 'gibberish']));
-assert.deepStrictEqual(enabledGames(), ['pokemon', 'mtg', 'lorcana'], 'hiding every known game is ignored');
+assert.deepStrictEqual(enabledGames(), ['pokemon', 'mtg', 'lorcana', 'riftbound'], 'malformed value falls back to showing everything');
+store.set('hidden_games', JSON.stringify(['pokemon', 'mtg', 'lorcana', 'riftbound', 'gibberish']));
+assert.deepStrictEqual(enabledGames(), ['pokemon', 'mtg', 'lorcana', 'riftbound'], 'hiding every known game is ignored');
 store.set('hidden_games', JSON.stringify(['gibberish']));
-assert.deepStrictEqual(enabledGames(), ['pokemon', 'mtg', 'lorcana'], 'an unknown game name hides nothing');
+assert.deepStrictEqual(enabledGames(), ['pokemon', 'mtg', 'lorcana', 'riftbound'], 'an unknown game name hides nothing');
 
 assert.strictEqual(gameLabel('mtg'), 'Magic: The Gathering');
 assert.strictEqual(gameLabel('mtg', true), 'MTG');
 assert.strictEqual(gameLabel('lorcana'), 'Disney Lorcana');
 assert.strictEqual(gameLabel('lorcana', true), 'Lorcana');
+assert.strictEqual(gameLabel('riftbound'), 'Riftbound');
+assert.strictEqual(gameLabel('riftbound', true), 'Riftbound');
 
 console.log('games self-check passed');

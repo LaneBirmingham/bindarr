@@ -1,3 +1,4 @@
+import { cardPriceText } from '../utils/cardPriceText';
 import { useState, useEffect, useRef } from 'react';
 import { X, MapPin, Trash2, Star, Maximize2, ExternalLink, Search, Layers, RefreshCw } from 'lucide-react';
 import { getCardDisplayName } from '../utils/langHelper';
@@ -375,6 +376,7 @@ function CardInspectorModal({ card, onClose, onUpdate, onDeleted, showToast, onV
   // Normal to Reverse Holofoil in the form changed nothing on screen — the number
   // only caught up after a save and a refetch, which reads as "prices don't
   // respond to the foil type". Same resolution order as the server.
+
   const displayPrice = resolveCardPrice(activeCard, printing);
 
   return (
@@ -602,7 +604,7 @@ function CardInspectorModal({ card, onClose, onUpdate, onDeleted, showToast, onV
                 <div>
                   <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700 }}>{t('inspector.marketPrice')}</div>
                   <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent-yellow)', marginTop: '0.15rem' }}>
-                    {priceText(displayPrice, activeCard.price_currency)}
+                    {cardPriceText(activeCard, t, printing)}
                   </div>
                   {/* Say where a non-English price came from and in what currency —
                       it is Cardmarket's EUR figure rendered with the app's $. */}
@@ -728,7 +730,7 @@ function CardInspectorModal({ card, onClose, onUpdate, onDeleted, showToast, onV
                         <div className="tcg-card-info" style={{ textAlign: 'center', marginTop: '0.35rem' }}>
                           <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>#{p.number}</div>
                           <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>{p.set_name}</div>
-                          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--accent-yellow)' }}>{priceText(p.price_trend, p.price_currency)}</div>
+                          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--accent-yellow)' }}>{cardPriceText(p, t)}</div>
                         </div>
                       </div>
                     ))}

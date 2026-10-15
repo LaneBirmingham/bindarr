@@ -29,7 +29,7 @@ const MODEL_DIR = process.env.CV_MODEL_DIR || path.join(__dirname, '..', 'data',
 const SIZE = 448;
 const MEAN = [0.485, 0.456, 0.406];
 const STD = [0.229, 0.224, 0.225];
-const GAMES = ['mtg', 'pokemon', 'lorcana'];
+const { GAMES } = require('./utils/games');
 
 const suffix = (lang) => (!lang || lang === 'en' || lang === 'English' ? '' : `-${String(lang).toLowerCase()}`);
 const binPath = (game, lang) => path.join(MODEL_DIR, `milo-${game}${suffix(lang)}-local.bin`);
@@ -147,7 +147,7 @@ async function newSetCount(game, lang = 'English') {
     // The `sets` table prefixes ids ("mtg-fdn", "lorcana-tfc") while card_cache
     // holds the bare code ("fdn"). Both forms are checked, which is what the OR in
     // the old query did — dropping either one reports every set as new.
-    const bare = (id) => String(id).toLowerCase().replace(/^(?:mtg|lorcana)-/, '');
+    const bare = (id) => String(id).toLowerCase().replace(/^(?:mtg|lorcana|riftbound)-/, '');
     return rows.filter(r =>
       !gaps.has(bare(r.id))
       && !cached.has(String(r.id).toLowerCase())
@@ -297,7 +297,7 @@ async function setCounts(game, lang = 'English') {
   const sets = {};
   for (const r of rows) {
     const sid = r.sid;
-    const bare = sid.replace(/^(mtg|lorcana)-/, '');
+    const bare = sid.replace(/^(mtg|lorcana|riftbound)-/, '');
     const e = sets[sid] || (sets[sid] = { cached: 0, embedded: 0 });
     e.cached++;
     if (embedded && embedded.has(r.id)) e.embedded++;
@@ -401,7 +401,7 @@ async function embedPhase(job) {
   // it embedded.
   const scoped = job.sets && job.sets.length;
   const setFilter = scoped ? job.sets.flatMap(s => {
-    const bare = s.replace(/^(mtg|lorcana)-/, '');
+    const bare = s.replace(/^(mtg|lorcana|riftbound)-/, '');
     return [bare, `${job.game}-${bare}`];
   }) : [];
   const rows = await db.all(
@@ -465,6 +465,13 @@ async function embedPhase(job) {
     Accept: 'image/*',
   };
   const fetchOne = async (row) => {
+    // Bundled Riftbound art follows the same embedding pipeline. Read its local
+    // snapshot directly so catalogue builds work without a listener or network.
+    if (job.game === 'riftbound') {
+      const local = require('./riftboundApi').localArtPath(row.image_url);
+      if (!local) throw new Error('Riftbound artwork is not in the local snapshot');
+      return fs.promises.readFile(local);
+    }
     const res = await fetch(embedUrl(row), {
       signal: AbortSignal.timeout(30000),
       headers: HEADERS,
@@ -541,6 +548,7 @@ async function embedPhase(job) {
 function start(game, lang = 'English', opts = {}) {
   if (current) throw new Error('a catalog build is already running');
   if (!GAMES.includes(game)) throw new Error(`unknown game ${game}`);
+  if (game === 'riftbound' && !languages.isEnglish(lang)) throw new Error('Riftbound snapshot supports English only');
   const job = {
     game, lang: languages.toName(lang) || 'English',
     // Which sets this build covers, or empty for the whole game. Lowercased once

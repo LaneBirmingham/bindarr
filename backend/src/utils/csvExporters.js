@@ -6,6 +6,7 @@ const REVERSE_CONDITION_MAP = {
 const EXPORT_STRATEGIES = {
   internal: (item) => ({
     'Card ID': item.card_id,
+    'Game': item.game || 'pokemon',
     'Name': item.name || item.card_name || '',
     'Set Name': item.set_name || '',
     'Set ID': item.set_id || item.set_code || '',
@@ -16,7 +17,9 @@ const EXPORT_STRATEGIES = {
     'Printing': item.printing || 'Normal',
     'Language': item.language || 'English',
     'Purchase Price': item.purchase_price || 0,
-    'Market Price': item.price_trend || item.market_price || 0,
+    'Market Price': item.price_status === 'unavailable' ? '' : (item.price_trend || item.market_price || 0),
+    'Price Status': item.price_status || '',
+    'Attribution': item.attribution || '',
     'Location Container': item.location_name || 'Unassigned',
     'Sub-Location Page/Row': item.sub_location_1 || '',
     'Sub-Location Slot/Section': item.sub_location_2 || '',

@@ -1,3 +1,4 @@
+import { cardPriceText } from '../utils/cardPriceText';
 import { useState, useRef, useCallback } from 'react';
 import { useDroppable, useDraggable } from '@dnd-kit/core';
 import { Lock, Edit3 } from 'lucide-react';
@@ -263,7 +264,7 @@ export function FocusedCardInfo({ card, slotNumber, moveSelect = null }) {
             {card.quantity > 1 && <span style={{ ...infoChipStyle, color: 'var(--text-strong)' }}>x{card.quantity}</span>}
             {card.price_trend > 0 && (
               <span style={{ ...infoChipStyle, color: 'var(--accent-yellow)', marginLeft: 'auto' }}>
-                {t('compartment.value', { price: priceText(card.price_trend) })}
+                {t('compartment.value', { price: cardPriceText(card, t) })}
               </span>
             )}
             {card.purchase_price > 0 && <span style={infoChipStyle}>{t('compartment.paid', { price: priceText(card.purchase_price) })}</span>}

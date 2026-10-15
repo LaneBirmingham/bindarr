@@ -4,8 +4,10 @@ const db = require('../db');
 const { parseThirdPartyCSV, parseManaboxText } = require('../utils/csvMappers');
 const scryfallApi = require('../scryfallApi');
 const lorcastApi = require('../lorcastApi');
+const riftboundApi = require('../riftboundApi');
+const { isGame } = require('../utils/games');
 const { generateExportCSV } = require('../utils/csvExporters');
-const { resolveCardPrice } = require('../utils/priceHelpers');
+const { resolveCardPrice, priceMetadata } = require('../utils/priceHelpers');
 const { isBinderType } = require('../utils/compartmentSort');
 const cardApi = require('../utils/cardApi');
 const pokemonProvider = require('../utils/pokemonProvider');
@@ -23,10 +25,11 @@ const { matcher, normName } = require('../utils/setCatalogueMatch');
 // number, actually has the card. A name alone is never enough: it names every
 // printing of the card.
 async function resolveImportedCard(item, user, setsFor) {
-  const game = item.game || 'pokemon';
   const id = item.card_id || item.id;
+  const game = id ? cardApi.gameOf(id, item.game) : (item.game || 'pokemon');
+  if (!isGame(game)) return null;
   if (id) {
-    if (await db.get(`SELECT id FROM card_cache WHERE id = ?`, [id])) return id;
+    if (await db.get(`SELECT id FROM card_cache WHERE id = ? AND game = ?`, [id, game])) return id;
     const card = await cardApi.getCardById(id, { game, tcgApiKey: user.tcg_api_key }).catch(() => null);
     if (card) return card.id;
   }
@@ -37,8 +40,9 @@ async function resolveImportedCard(item, user, setsFor) {
   // route); one that reaches here is a printing Scryfall does not have.
   if (game === 'mtg' || !number || !set) return null;
 
-  if (game === 'lorcana') {
-    const { cards } = await lorcastApi.searchCards({ set, number, limit: 250 });
+  if (game === 'lorcana' || game === 'riftbound') {
+    const api = game === 'riftbound' ? riftboundApi : lorcastApi;
+    const { cards } = await api.searchCards({ set, number, limit: 250 });
     return pick(cards, item.name);
   }
 
@@ -80,6 +84,7 @@ router.get('/export', async (req, res) => {
         c.purchase_price,
         c.added_at,
         cc.id as card_id,
+        cc.game,
         cc.name as name,
         cc.supertype,
         cc.types,
@@ -117,6 +122,8 @@ router.get('/export', async (req, res) => {
     // would win over the resolved number and export the raw price anyway.
     const rows = raw.map(({ price_trend, price_normal, price_holofoil, price_reverse_holofoil, price_1st_edition, ...keep }) => ({
       ...keep,
+      ...priceMetadata(keep),
+      ...(keep.game === 'riftbound' ? { attribution: riftboundApi.NOTICE } : {}),
       market_price: resolveCardPrice({ price_trend, price_normal, price_holofoil, price_reverse_holofoil, price_1st_edition, ...keep }),
       // The two sub-location columns the exporters read. They used to be selected
       // straight off the collection table as sub_location_1/2 — columns db.js has
@@ -277,7 +284,15 @@ router.post('/import', async (req, res) => {
         }));
       }
       const cardId = resolved.get(key);
-      if (cardId) toImport.push({ item, cardId });
+      if (cardId) {
+        const card = await db.get('SELECT game FROM card_cache WHERE id = ?', [cardId]);
+        if (!languages.isLanguageSupported(card.game, item.language || 'English')) {
+          unresolved.push({ name: item.name || '', set: item.set_code || item.set_id || '', number: item.collector_number || item.number || '',
+            quantity: Math.max(1, parseInt(item.quantity, 10) || 1), reason: 'Language is not supported for this game' });
+        } else {
+          toImport.push({ item: { ...item, game: card.game, ...(card.game === 'riftbound' ? { language: 'English' } : {}) }, cardId });
+        }
+      }
       else unresolved.push({
         name: item.name || '',
         set: item.set_code || item.set_id || item.set_name || '',

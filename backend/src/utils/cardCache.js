@@ -68,7 +68,7 @@ async function cacheNormalizedCards(cards, game, opts = {}) {
         c.language || 'English', c.printed_name || null,
         c.tcgplayer_url || null, c.cardmarket_url || null,
         num(c.tcgplayer_product_id),
-        c.price_currency || 'USD', c.price_source || null,
+        game === 'riftbound' ? null : (c.price_currency || 'USD'), c.price_source || null,
       );
     }
     await db.run(

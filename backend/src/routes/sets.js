@@ -6,6 +6,8 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const { game, lang } = req.query;
+    if (game && !require('../utils/games').isGame(game)) return res.status(400).json({ error: 'Invalid game' });
+    if (game === 'riftbound') return res.json(await require('../riftboundApi').listSets(lang));
     if (game === 'pokemon' && await require('../utils/pokemonProvider').providerFor(lang) === 'pokemontcgapi') {
       return res.json(await require('../pokemontcgapi').listSets(lang));
     }

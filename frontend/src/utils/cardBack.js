@@ -24,6 +24,7 @@ const THEMES = {
   pokemon: { glow: '#60a5fa', ring: '#facc15' },
   mtg: { glow: '#a855f7', ring: '#cbd5e1' },
   lorcana: { glow: '#eab308', ring: '#f59e0b' },
+  riftbound: { glow: '#2dd4bf', ring: '#d4af37' },
   default: { glow: '#ff4747', ring: '#cbd5e1' },
 };
 
@@ -121,6 +122,7 @@ const BACKS = {
   pokemon: toDataUri(svg('pokemon')),
   mtg: toDataUri(svg('mtg')),
   lorcana: toDataUri(svg('lorcana')),
+  riftbound: toDataUri(svg('riftbound')),
   default: toDataUri(svg('default')),
 };
 

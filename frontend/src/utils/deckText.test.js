@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { buildDeckExport, parseDeckLine } from './deckText.js';
+import { buildDeckExport, parseDeckLine, selectImportedCard } from './deckText.js';
 
 const cards = [
   { quantity: 4, name: 'Pikachu ex', set_id: 'svi', number: '63', supertype: 'Pokémon' },
@@ -38,3 +38,27 @@ const bl = buildDeckExport([
 assert.strictEqual(bl, '3 Pikachu ex\n3 Iono', 'buylist shortfall lines');
 
 console.log('deckText buylist check passed');
+
+// Exact printing IDs preserve promo/star variants and name suffixes. A name is
+// insufficient when the snapshot has several distinct printings of that card.
+const riftbound = [
+  { id: 'riftbound-ogn-001-298', name: 'Annie', quantity: 2 },
+  { id: 'riftbound-unl-229*-219', name: 'Kai’Sa (Signature)', quantity: 1 },
+  { id: 'riftbound-ogs-003-STAR', name: 'Example (Alternate Art)', quantity: 1 },
+  { id: 'riftbound-ogn-001-P-v1234567890abcdef', name: 'Annie (Metal)', quantity: 1 },
+];
+const exactLines = buildDeckExport(riftbound, 'riftbound').split('\n');
+for (const [index, line] of exactLines.entries()) {
+  const card = riftbound[index];
+  const parsed = parseDeckLine(line);
+  assert.deepStrictEqual(parsed, { qty: card.quantity, name: card.name, cardId: card.id });
+  assert.strictEqual(selectImportedCard(riftbound, parsed, 'riftbound'), card);
+}
+assert.strictEqual(selectImportedCard([
+  { id: 'printing-1', name: 'Annie' }, { id: 'printing-2', name: 'Annie' },
+], { name: 'Annie', qty: 1 }, 'riftbound'), null, 'ambiguous names require printing selection');
+assert.strictEqual(selectImportedCard(riftbound, { name: 'Annie', cardId: 'riftbound-missing', qty: 1 }, 'riftbound'), null,
+  'unknown exact IDs never fall back to a same-name printing');
+assert.strictEqual(selectImportedCard(riftbound, { name: 'Annie', qty: 1 }, 'riftbound'), riftbound[0]);
+assert.strictEqual(selectImportedCard([], { name: 'Missing', qty: 1 }, 'riftbound'), null);
+console.log('deckText Riftbound exact-printing round trip passed');

@@ -2,7 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const assert = require('assert');
-const { spawn } = require('child_process');
+const { spawn: spawnChild } = require('child_process');
 
 const net = require('net');
 
@@ -10,9 +10,29 @@ const net = require('net');
 const tmpDb = path.join(os.tmpdir(), `bindarr-scryfall-test-${process.pid}.db`);
 process.env.DB_PATH = tmpDb;
 
-let currentPort = 3030;
+// Developer services may own fixed ports (3031 on macOS in particular). Ask
+// the OS for a free port instead of making test success depend on local services.
 function getNextPort() {
-  return (currentPort++).toString();
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once('error', reject);
+    probe.listen(0, '0.0.0.0', () => {
+      const port = String(probe.address().port);
+      probe.close(error => error ? reject(error) : resolve(port));
+    });
+  });
+}
+
+const children = new Map();
+function spawn(command, args, options) {
+  const proc = spawnChild(command, args, options);
+  let output = '';
+  const capture = data => { output = (output + data.toString()).slice(-16000); };
+  proc.stdout.on('data', capture);
+  proc.stderr.on('data', capture);
+  proc.on('error', error => capture(error.message));
+  children.set(String(options.env.PORT), { proc, output: () => output });
+  return proc;
 }
 
 function isPortFree(port) {
@@ -28,10 +48,15 @@ function isPortFree(port) {
 
 const projectRoot = path.join(__dirname, '../../../');
 const db = require('../../src/db');
+const { parseSqliteUtc } = require('../../src/utils/priceHelpers');
 
 async function waitForServer(port) {
   const url = `http://localhost:${port}/api/health`;
   for (let i = 0; i < 150; i++) {
+    const child = children.get(String(port));
+    if (child && (child.proc.exitCode !== null || child.proc.signalCode !== null)) {
+      throw new Error(`Server on port ${port} exited before readiness:\n${child.output()}`);
+    }
     try {
       const res = await fetch(url);
       if (res.ok) return;
@@ -40,7 +65,7 @@ async function waitForServer(port) {
     }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
-  throw new Error(`Server on port ${port} did not start in time`);
+  throw new Error(`Server on port ${port} did not start in time:\n${children.get(String(port))?.output() || ''}`);
 }
 
 async function stopServer(proc, port) {
@@ -87,7 +112,7 @@ async function runTests() {
   // Start server preloading scryfall-mock.js
   const mockScript = path.join(__dirname, 'scryfall-mock.js');
   const serverScript = path.join(projectRoot, 'backend/src/server.js');
-  let port = getNextPort();
+  let port = await getNextPort();
   const server = spawn('node', ['-r', mockScript, serverScript], {
     env: {
       ...process.env,
@@ -141,7 +166,7 @@ async function runTests() {
       // Re-create server process with mock error
       await stopServer(server, port);
       
-      port = getNextPort();
+      port = await getNextPort();
       const serverErr = spawn('node', ['-r', mockScript, serverScript], {
         env: {
           ...process.env,
@@ -169,7 +194,7 @@ async function runTests() {
 
     // F3-TC4: Verify proxy rate limiting returns 429
     try {
-      port = getNextPort();
+      port = await getNextPort();
       const serverRate = spawn('node', ['-r', mockScript, serverScript], {
         env: {
           ...process.env,
@@ -199,7 +224,7 @@ async function runTests() {
 
     // F3-TC5: Verify mapped fields contract
     try {
-      port = getNextPort();
+      port = await getNextPort();
       const serverField = spawn('node', ['-r', mockScript, serverScript], {
         env: {
           ...process.env,
@@ -230,7 +255,7 @@ async function runTests() {
 
     // F3-TC6: Verify empty search results return 200 with empty array
     try {
-      port = getNextPort();
+      port = await getNextPort();
       const serverEmpty = spawn('node', ['-r', mockScript, serverScript], {
         env: {
           ...process.env,
@@ -253,7 +278,7 @@ async function runTests() {
 
     // F3-TC7: Verify API timeout returns 504 Gateway Timeout or fallback cached data
     try {
-      port = getNextPort();
+      port = await getNextPort();
       const serverTime = spawn('node', ['-r', mockScript, serverScript], {
         env: {
           ...process.env,
@@ -275,7 +300,7 @@ async function runTests() {
 
     // F3-TC8: Verify cache expiration (3 days) triggers background refresh
     try {
-      port = getNextPort();
+      port = await getNextPort();
       const serverExp = spawn('node', ['-r', mockScript, serverScript], {
         env: {
           ...process.env,
@@ -300,7 +325,7 @@ async function runTests() {
       for (let i = 0; i < 25 && !fresh; i++) {
         await new Promise(resolve => setTimeout(resolve, 200));
         const cached = await db.get(`SELECT last_updated FROM card_cache WHERE id = ?`, ['mtg-54321']);
-        fresh = Date.now() - new Date(cached.last_updated).getTime() < 10000;
+        fresh = Date.now() - parseSqliteUtc(cached.last_updated).getTime() < 10000;
       }
       assert.ok(fresh, 'Background refresh should update last_updated to now');
       console.log('PASS: F3-TC8');
@@ -317,7 +342,7 @@ async function runTests() {
     // when the request uses the real syntax — `lang:ja` in q plus
     // include_multilingual — so this also guards the query construction.
     try {
-      port = getNextPort();
+      port = await getNextPort();
       const serverLang = spawn('node', ['-r', mockScript, serverScript], {
         env: {
           ...process.env,
@@ -351,7 +376,7 @@ async function runTests() {
 
     // F3-TC10: Verify double-faced transform cards resolve using front face
     try {
-      port = getNextPort();
+      port = await getNextPort();
       const serverDF = spawn('node', ['-r', mockScript, serverScript], {
         env: {
           ...process.env,
@@ -378,7 +403,7 @@ async function runTests() {
     // the three things a set browse relies on to add many cards without
     // re-adding what is already in the binder.
     try {
-      port = getNextPort();
+      port = await getNextPort();
       const serverBulk = spawn('node', ['-r', mockScript, serverScript], {
         env: { ...process.env, PORT: port, DB_PATH: tmpDb }
       });
@@ -426,7 +451,9 @@ async function runTests() {
 
   } finally {
     // Teardown everything
-    try { await stopServer(server, port); } catch {}
+    for (const [childPort, child] of children) {
+      try { await stopServer(child.proc, childPort); } catch {}
+    }
     try {
       await new Promise(resolve => {
         db.dbConnection.close(() => resolve());

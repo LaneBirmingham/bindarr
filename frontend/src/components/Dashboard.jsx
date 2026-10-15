@@ -1,3 +1,4 @@
+import { cardPriceText } from '../utils/cardPriceText';
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
 import { TrendingUp, Coins, Library, Trophy, Plus, ArrowUpRight } from 'lucide-react';
@@ -181,6 +182,8 @@ function Dashboard({ statsTrigger, onNavigate, setSelectedLocationId, setFocusEn
     <div>
       {renderGameTabs()}
 
+      {summary.unpricedCards > 0 && <p role="status">{t('riftbound.valuationNote', { count: summary.unpricedCards })}</p>}
+
       {/* Metrics Summary Grid */}
       <div className="metrics-grid">
         {/* Net Worth Card with historical switcher */}
@@ -213,7 +216,7 @@ function Dashboard({ statsTrigger, onNavigate, setSelectedLocationId, setFocusEn
               ))}
             </div>
           </div>
-          <div className="metric-value">{currencySymbol()}{money(summary.totalValue)}</div>
+          <div className="metric-value">{summary.valuationAvailable === false ? t('riftbound.priceUnavailable') : `${currencySymbol()}${money(summary.totalValue)}`}</div>
           {(() => {
             const change = timePeriod === '7d' ? summary.change7d :
                            timePeriod === '30d' ? summary.change30d :
@@ -248,7 +251,7 @@ function Dashboard({ statsTrigger, onNavigate, setSelectedLocationId, setFocusEn
           </div>
           <div className="metric-value">{currencySymbol()}{money(summary.totalSpent)}</div>
           <div className="metric-footer">
-            <span>{t('dash.avgPerCard', { price: priceText(summary.avgCardValue) })}</span>
+            <span>{summary.unpricedCards > 0 ? t('riftbound.priceUnavailable') : t('dash.avgPerCard', { price: priceText(summary.avgCardValue) })}</span>
           </div>
         </div>
 
@@ -263,7 +266,7 @@ function Dashboard({ statsTrigger, onNavigate, setSelectedLocationId, setFocusEn
                 <span className="metric-icon"><ArrowUpRight size={18} style={{ transform: isPositive ? 'none' : 'rotate(90deg)' }} /></span>
               </div>
               <div className="metric-value" style={{ color: isPositive ? '#22c55e' : '#ef4444' }}>
-                {isPositive ? '+' : '−'}{currencySymbol()}{money(Math.abs(roi.abs || 0))}
+                {summary.unpricedCards > 0 ? t('riftbound.priceUnavailable') : `${isPositive ? '+' : '−'}${currencySymbol()}${money(Math.abs(roi.abs || 0))}`}
               </div>
               <div className="metric-footer">
                 <span>{roi.pct === null ? t('dash.roiUnset') : t('dash.roiVsCost', { pct: `${isPositive ? '+' : ''}${roi.pct}` })}</span>
@@ -294,7 +297,9 @@ function Dashboard({ statsTrigger, onNavigate, setSelectedLocationId, setFocusEn
           </span>
         </div>
         <div className="chart-container" style={{ height: '240px', position: 'relative' }}>
-          {loadingHistory ? (
+          {summary.valuationAvailable === false ? (
+            <div className="chart-empty">{t('riftbound.priceUnavailable')}</div>
+          ) : loadingHistory ? (
             <div className="spinner" style={{ position: 'absolute', top: '45%', left: '45%' }}></div>
           ) : historyData.length < 2 ? (
             <div className="chart-empty">{t('dash.notEnoughHistory')}</div>
@@ -330,11 +335,13 @@ function Dashboard({ statsTrigger, onNavigate, setSelectedLocationId, setFocusEn
           <div className="glass-panel">
             <h3 className="chart-title">{t('dash.valueBySet')}</h3>
             <div className="chart-container">
-              {sets.length === 0 ? (
+              {summary.valuationAvailable === false ? (
+                <div className="chart-empty">{t('riftbound.priceUnavailable')}</div>
+              ) : sets.length === 0 ? (
                 <div className="chart-empty">{t('dash.noSetData')}</div>
               ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={sets} layout="vertical" margin={{ left: 10, right: 30, top: 10, bottom: 10 }}>
+                <BarChart data={sets.filter(s => s.value !== null)} layout="vertical" margin={{ left: 10, right: 30, top: 10, bottom: 10 }}>
                   <XAxis type="number" stroke="var(--text-secondary)" tickFormatter={(v) => `${currencySymbol()}${v}`} />
                   <YAxis dataKey="name" type="category" width={120} stroke="var(--text-secondary)" tickLine={false} axisLine={false} style={{ fontSize: '0.8rem' }} />
                   <Tooltip 
@@ -476,7 +483,7 @@ function Dashboard({ statsTrigger, onNavigate, setSelectedLocationId, setFocusEn
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontWeight: 800, color: 'var(--accent-yellow)', fontSize: '0.95rem' }}>{priceText(card.price_trend)}<span style={{ fontSize: '0.6rem', fontWeight: 500, color: 'var(--text-muted)' }}> {t('dash.each')}</span></div>
+                    <div style={{ fontWeight: 800, color: 'var(--accent-yellow)', fontSize: '0.95rem' }}>{cardPriceText(card, t)}<span style={{ fontSize: '0.6rem', fontWeight: 500, color: 'var(--text-muted)' }}> {t('dash.each')}</span></div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
                       {card.quantity > 1 ? t('dash.qtyTotal', { qty: card.quantity, price: priceText(card.price_trend * card.quantity) }) : t('dash.qty', { qty: 1 })}
                     </div>
@@ -516,7 +523,7 @@ function Dashboard({ statsTrigger, onNavigate, setSelectedLocationId, setFocusEn
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 700, color: 'var(--accent-yellow)', fontSize: '0.8rem' }}>{priceText(card.price_trend)}<span style={{ fontSize: '0.55rem', fontWeight: 500, color: 'var(--text-muted)' }}> {t('dash.each')}</span></div>
+                      <div style={{ fontWeight: 700, color: 'var(--accent-yellow)', fontSize: '0.8rem' }}>{cardPriceText(card, t)}<span style={{ fontSize: '0.55rem', fontWeight: 500, color: 'var(--text-muted)' }}> {t('dash.each')}</span></div>
                       <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{card.quantity > 1 ? t('dash.qty', { qty: card.quantity }) : (card.added_at ? new Date(card.added_at).toLocaleDateString(locale) : '')}</div>
                     </div>
                   </div>

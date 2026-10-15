@@ -57,6 +57,7 @@ export default function CardImage({ card, src, alt, game, ...imgProps }) {
   return (
     <img
       {...imgProps}
+      style={card?.game === 'riftbound' && card?.supertype === 'Battlefield' ? { ...imgProps.style, objectFit: 'contain' } : imgProps.style}
       src={current}
       alt={alt ?? card?.name ?? ''}
       // Lets callers style or test the placeholder state without re-deriving it.

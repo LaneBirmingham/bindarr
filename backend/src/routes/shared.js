@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { resolveCardPrice, parseCardRow } = require('../utils/priceHelpers');
+const { resolveCardPrice, parseCardRow, valuationMetadata } = require('../utils/priceHelpers');
 const { compartmentLabel } = require('../utils/compartmentSort');
 
 const router = express.Router();
@@ -112,6 +112,7 @@ router.get('/:share_token', async (req, res) => {
         cc.set_name,
         cc.number,
         cc.image_url,
+        cc.game,
         cc.price_trend,
         cc.price_normal,
         cc.price_holofoil,
@@ -139,6 +140,8 @@ router.get('/:share_token', async (req, res) => {
       return card;
     });
 
+    const valuation = valuationMetadata(rows);
+
     // Calculate public stats
     let totalCards = 0;
     let uniqueCards = formatted.length;
@@ -150,7 +153,7 @@ router.get('/:share_token', async (req, res) => {
 
     formatted.forEach(row => {
       const qty = row.quantity || 1;
-      const price = row.price_trend || 0;
+      const price = row.price_trend;
 
       totalCards += qty;
       totalValue += qty * price;
@@ -166,10 +169,11 @@ router.get('/:share_token', async (req, res) => {
       rarityCounts[rarity] = (rarityCounts[rarity] || 0) + qty;
 
       if (!setCounts[row.set_id]) {
-        setCounts[row.set_id] = { name: row.set_name, count: 0, value: 0 };
+        setCounts[row.set_id] = { name: row.set_name, count: 0, value: 0, priced: false };
       }
       setCounts[row.set_id].count += qty;
       setCounts[row.set_id].value += qty * price;
+      if (price !== null) setCounts[row.set_id].priced = true;
     });
 
     res.json({
@@ -178,9 +182,10 @@ router.get('/:share_token', async (req, res) => {
       collection: formatted,
       stats: {
         summary: {
+          ...valuation,
           totalCards,
           uniqueCards,
-          totalValue: parseFloat(totalValue.toFixed(2))
+          totalValue: valuation.valuationAvailable ? parseFloat(totalValue.toFixed(2)) : null
         },
         types: Object.keys(typeCounts).map(name => ({ name, value: typeCounts[name] })),
         rarities: Object.keys(rarityCounts).map(name => ({ name, value: rarityCounts[name] })),
@@ -188,7 +193,7 @@ router.get('/:share_token', async (req, res) => {
           id,
           name: setCounts[id].name,
           count: setCounts[id].count,
-          value: parseFloat(setCounts[id].value.toFixed(2))
+          value: setCounts[id].priced ? parseFloat(setCounts[id].value.toFixed(2)) : null
         })).sort((a, b) => b.value - a.value).slice(0, 8)
       }
     });

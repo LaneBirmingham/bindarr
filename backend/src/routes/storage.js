@@ -115,7 +115,7 @@ router.get('/locations', async (req, res) => {
 });
 
 const RULE_TYPES = ['any', 'alphabetical_range', 'specific_sets', 'compound'];
-const GAME_RESTRICTIONS = ['any', 'pokemon', 'mtg'];
+const GAME_RESTRICTIONS = ['any', ...require('../utils/games').GAMES];
 
 router.post('/locations', async (req, res) => {
   const { name, type, sort_order = 'name-asc', foil_sorting = 'normals_first', rule_type = 'any', rule_config, compartmentPlan, game = 'any', fixed_slots } = req.body;

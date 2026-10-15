@@ -79,7 +79,7 @@ export function translatedName(card) {
 // Casing is left exactly as the provider gives it: TCGdex codes are mixed-case
 // ("SV8a", "sv03") and upper-casing them produces a code that does not resolve.
 export function setCode(card) {
-  const code = String(card?.set_id || '').replace(/^mtg-/, '');
+  const code = String(card?.set_id || '').replace(/^(?:mtg|riftbound)-/, '');
   return code || null;
 }
 

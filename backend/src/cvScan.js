@@ -405,7 +405,7 @@ async function match(imageBuffer, game = 'mtg', topK = 8, opts = {}) {
   // narrowed the scan on purpose, and an unscoped sweep of the other language is
   // exactly the wrong-card answer the scope was meant to prevent.
   const wanted = (opts.sets || []).map(x => String(x).toLowerCase()).filter(Boolean);
-  const want = new Set(wanted.flatMap(x => [x, x.replace(/^(mtg|lorcana)-/, ''), `${game}-${x.replace(/^(mtg|lorcana)-/, '')}`]));
+  const want = new Set(wanted.flatMap(x => [x, x.replace(/^(mtg|lorcana|riftbound)-/, ''), `${game}-${x.replace(/^(mtg|lorcana|riftbound)-/, '')}`]));
   let scoped = null;
   const search = [];
   for (const c of cats) {
@@ -569,7 +569,7 @@ async function scoreCards(imageBuffer, game = 'mtg', cards = [], opts = {}) {
       const possibleIds = [];
       if (card.id) {
         possibleIds.push(String(card.id));
-        possibleIds.push(String(card.id).replace(/^(mtg|pokemon|lorcana)-/, ''));
+        possibleIds.push(String(card.id).replace(/^(mtg|pokemon|lorcana|riftbound)-/, ''));
       }
       if (card.scryfall_id) possibleIds.push(String(card.scryfall_id));
       if (card.tcgplayer_id) possibleIds.push(String(card.tcgplayer_id));

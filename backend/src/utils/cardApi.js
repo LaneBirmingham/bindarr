@@ -25,15 +25,18 @@ const scryfallApi = require('../scryfallApi');
 const tcgApi = require('../tcgApi');
 const tcgdexApi = require('../tcgdexApi');
 const lorcastApi = require('../lorcastApi');
+const riftboundApi = require('../riftboundApi');
 const languages = require('./languages');
 
 const isMtgId = (id) => String(id || '').startsWith('mtg-');
 const isTcgdexId = (id) => String(id || '').startsWith('tcgdex-');
 const isPokemontcgapiId = id => String(id || '').startsWith('pokemontcgapi-');
 const isLorcanaId = (id) => String(id || '').startsWith('lorcana-');
+const isRiftboundId = (id) => String(id || '').startsWith('riftbound-');
 
 // The game an ID implies. `game` from the request wins when explicit; otherwise inferred from prefix.
 function gameOf(id, requestedGame) {
+  if (requestedGame === 'riftbound' || isRiftboundId(id)) return 'riftbound';
   if (requestedGame === 'mtg' || isMtgId(id)) return 'mtg';
   if (requestedGame === 'lorcana' || isLorcanaId(id)) return 'lorcana';
   return 'pokemon';
@@ -61,6 +64,7 @@ async function hydrate(id) {
 // provider does not have it.
 async function getCardById(id, { game, tcgApiKey = '' } = {}) {
   const g = gameOf(id, game);
+  if (g === 'riftbound') return await riftboundApi.getCardById(id);
   if (g === 'mtg') return await scryfallApi.getCardById(id);
   if (g === 'lorcana') return await lorcastApi.getCardById(id);
   if (isPokemontcgapiId(id)) return await require('../pokemontcgapi').getCardById(id);
@@ -136,4 +140,4 @@ async function printingInLanguage(card, language) {
   return null;
 }
 
-module.exports = { isPokemontcgapiId, isMtgId, isTcgdexId, isLorcanaId, gameOf, hydrate, getCardById, printingInLanguage };
+module.exports = { isPokemontcgapiId, isMtgId, isTcgdexId, isLorcanaId, isRiftboundId, gameOf, hydrate, getCardById, printingInLanguage };

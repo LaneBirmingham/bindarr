@@ -10,6 +10,7 @@
 function cardLine(c, format) {
   const set = String(c.set_id || c.set_code || '').toUpperCase();
   const num = c.number || '';
+  if (format === 'riftbound') return `${c.quantity} ${c.name} [${c.card_id || c.id}]`;
   if (format === 'mtga') return `${c.quantity} ${c.name}${set ? ` (${set})` : ''}${num ? ` ${num}` : ''}`;
   if (format === 'ptcgl') return `${c.quantity} ${c.name}${set ? ` ${set}` : ''}${num ? ` ${num}` : ''}`;
   return `${c.quantity} ${c.name}`; // plain
@@ -54,13 +55,15 @@ export function buildDeckExport(cards, format = 'ptcgl') {
     return 'Deck\n' + cards.map(c => cardLine(c, 'mtga')).join('\n');
   }
 
-  return cards.map(c => cardLine(c, 'plain')).join('\n');
+  return cards.map(c => cardLine(c, format === 'riftbound' ? 'riftbound' : 'plain')).join('\n');
 }
 
 // Pull {qty, name} out of one decklist line, stripping trailing set code +
 // collector number so "4 Pikachu ex SVI 63", "4 Lightning Bolt (2X2) 117",
 // "2 Pikachu (SVI) #63" and "4 Pikachu" all yield the bare card name.
 export function parseDeckLine(line) {
+  const exact = String(line).trim().match(/^(\d+)x?\s+(.+?)\s+\[(riftbound-[^\]\s]+)\]$/);
+  if (exact) return { qty: Number(exact[1]), name: exact[2], cardId: exact[3] };
   const m = String(line).trim().match(/^(\d+)x?\s+(.+)$/i);
   if (!m) return null;
   const qty = parseInt(m[1], 10);
@@ -78,4 +81,13 @@ export function parseDeckLine(line) {
     .trim();
 
   return name ? { qty, name } : null;
+}
+
+// Riftbound printings cannot be inferred from name alone. The exact-list format
+// carries the stable ID; ambiguous handwritten names stay unmatched for review.
+export function selectImportedCard(cards, parsed, game) {
+  if (parsed.cardId) return cards.find(c => c.id === parsed.cardId) || null;
+  if (game !== 'riftbound') return cards[0] || null;
+  const matches = cards.filter(c => c.name === parsed.name);
+  return matches.length === 1 ? matches[0] : null;
 }

@@ -6,8 +6,8 @@ import { translateJapaneseName } from '../utils/langHelper';
 import { displayName } from '../utils/languages';
 import CheckoutWizardModal from './CheckoutWizardModal';
 import { useBackGuard } from '../utils/useBackGuard';
-import { buildDeckExport, parseDeckLine } from '../utils/deckText';
-import { defaultGame, gameOptions, showGamePicker, isGameEnabled } from '../utils/games';
+import { buildDeckExport, parseDeckLine, selectImportedCard } from '../utils/deckText';
+import { defaultGame, gameOptions, showGamePicker, isGameEnabled, gameLabel } from '../utils/games';
 import CardImage from './CardImage';
 import { useT } from '../utils/i18n';
 
@@ -31,6 +31,7 @@ const deckCountByName = (deckCards, name) =>
 // match the game the picker opens on.
 const newDeckDefaults = (game) => {
   if (game === 'mtg') return { format: 'Commander / EDH', targetSize: 100 };
+  if (game === 'riftbound') return { format: 'Casual', targetSize: 40 };
   if (game === 'lorcana') return { format: 'Core (Constructed)', targetSize: 60 };
   return { format: 'Standard', targetSize: 60 };
 };
@@ -56,6 +57,7 @@ function DeckBuilder({ showToast }) {
   // Deck Creation States & Constants
   const POKEMON_FORMATS = ['Standard', 'Expanded', 'GLC (Gym Leader Challenge)', 'Unlimited', 'Retro'];
   const MTG_FORMATS = ['Commander / EDH', 'Standard', 'Modern', 'Pioneer', 'Legacy', 'Vintage', 'Pauper'];
+  const RIFTBOUND_FORMATS = ['Casual'];
   const LORCANA_FORMATS = ['Core (Constructed)', 'Casual', 'Draft / Sealed'];
   const DECK_CATEGORIES = ['Competitive', 'Casual', 'Tournament', 'Theorycraft', 'Proxy', 'Trade'];
   const DECK_ACCENT_COLORS = [
@@ -74,7 +76,7 @@ function DeckBuilder({ showToast }) {
   const [newDeckDesc, setNewDeckDesc] = useState('');
   const [newDeckGame, setNewDeckGame] = useState(() => defaultGame()); // 'pokemon' | 'mtg'
   const [newDeckFormat, setNewDeckFormat] = useState(() => newDeckDefaults(defaultGame()).format);
-  const [newDeckCategory, setNewDeckCategory] = useState('Competitive');
+  const [newDeckCategory, setNewDeckCategory] = useState(() => defaultGame() === 'riftbound' ? 'Casual' : 'Competitive');
   const [newDeckAccentColor, setNewDeckAccentColor] = useState('#eab308');
   const [newDeckTargetSize, setNewDeckTargetSize] = useState(() => newDeckDefaults(defaultGame()).targetSize);
   const [newDeckImportText, setNewDeckImportText] = useState('');
@@ -306,7 +308,7 @@ function DeckBuilder({ showToast }) {
         return;
       }
       
-      if (!isBasicEnergyOrLand(card, activeDeck.game) && deckCountByName(activeDeck.cards, card.name) >= 4) {
+      if (activeDeck.game !== 'riftbound' && !isBasicEnergyOrLand(card, activeDeck.game) && deckCountByName(activeDeck.cards, card.name) >= 4) {
         showToast(t('deck.errCopyLimit', { count: 4, name: displayName(card) }));
         return;
       }
@@ -575,7 +577,7 @@ function DeckBuilder({ showToast }) {
   };
 
   // --- EXPORT & IMPORT LOGIC ---
-  const effectiveExportFormat = exportFormat || ((activeDeck?.game === 'mtg') ? 'mtga' : 'ptcgl');
+  const effectiveExportFormat = activeDeck?.game === 'riftbound' ? 'riftbound' : exportFormat || ((activeDeck?.game === 'mtg') ? 'mtga' : 'ptcgl');
 
   const handleExportDeckText = () => {
     if (!activeDeck) return '';
@@ -617,7 +619,8 @@ function DeckBuilder({ showToast }) {
         if (res.ok) {
           const cards = await res.json();
           if (cards.length > 0) {
-            const card = cards[0];
+            const card = selectImportedCard(cards, parsed, activeDeck.game);
+            if (!card) { results.push({ rawName, requestedQty: qty, ownedQty: 0, inDeckQty: 0, card: null, status: 'missing' }); continue; }
             const owned = card.owned_qty || 0;
             const inDeck = activeDeck.cards.find(c => c.id === card.id)?.quantity || 0;
             results.push({
@@ -682,11 +685,12 @@ function DeckBuilder({ showToast }) {
           const res = await fetch(`/api/search?name=${encodeURIComponent(rawName)}&scope=collection&game=${activeDeck.game || 'pokemon'}`);
           if (res.ok) {
             const cards = await res.json();
-            if (cards.length > 0) {
+            const card = selectImportedCard(cards, parsed, activeDeck.game);
+            if (card) {
               await fetch(`/api/decks/${activeDeck.id}/cards`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ card_id: cards[0].id, quantity: qty })
+                body: JSON.stringify({ card_id: card.id, quantity: qty })
               });
               addedCount++;
             }
@@ -727,6 +731,7 @@ function DeckBuilder({ showToast }) {
     return 'Character';
   };
   const cardGroup = (card) => {
+    if (deckGame === 'riftbound') return card.supertype || 'Other';
     if (deckGame === 'mtg') return mtgCardType(card);
     if (deckGame === 'lorcana') return lorcanaCardType(card);
     let type = card.supertype || 'Pokémon';
@@ -735,7 +740,7 @@ function DeckBuilder({ showToast }) {
   };
 
   // Groups order based on game
-  const GROUP_ORDER = deckGame === 'mtg'
+  const GROUP_ORDER = deckGame === 'riftbound' ? ['Unit', 'Spell', 'Gear', 'Rune', 'Legend', 'Battlefield', 'Other'] : deckGame === 'mtg'
     ? ['Creature', 'Planeswalker', 'Instant', 'Sorcery', 'Enchantment', 'Artifact', 'Battle', 'Land', 'Other']
     : (deckGame === 'lorcana'
       ? ['Character', 'Action', 'Item', 'Location', 'Other']
@@ -813,7 +818,7 @@ function DeckBuilder({ showToast }) {
       });
       return Object.keys(map).map(key => ({ name: key, value: map[key] }));
     }
-    if (deckGame === 'lorcana') {
+    if (deckGame === 'lorcana' || deckGame === 'riftbound') {
       activeDeck.cards.forEach(c => {
         const inks = Array.isArray(c.types) && c.types.length ? c.types : (c.ink ? [c.ink] : []);
         if (inks.length === 0) {
@@ -845,9 +850,7 @@ function DeckBuilder({ showToast }) {
 
   // --- SELECTION MENU METRICS & FILTERING ---
   const totalDecksCount = decks.length;
-  const pokemonDecksCount = decks.filter(d => (d.game || 'pokemon') === 'pokemon').length;
-  const mtgDecksCount = decks.filter(d => d.game === 'mtg').length;
-  const lorcanaDecksCount = decks.filter(d => d.game === 'lorcana').length;
+  const deckCountForGame = (game) => decks.filter(d => (d.game || 'pokemon') === game).length;
 
   const filteredDecks = decks.filter(deck => {
     const q = deckSearchTerm.trim().toLowerCase();
@@ -929,7 +932,7 @@ function DeckBuilder({ showToast }) {
               <div className="sub-nav-tabs" style={{ margin: 0, background: 'rgba(0,0,0,0.25)', padding: '3px', borderRadius: 'var(--radius-sm)' }}>
                 {[
                   ['all', 'All Decks', totalDecksCount],
-                  ...gameOptions().map(g => [g.value, g.short, g.value === 'mtg' ? mtgDecksCount : (g.value === 'lorcana' ? lorcanaDecksCount : pokemonDecksCount)]),
+                  ...gameOptions().map(g => [g.value, g.short, deckCountForGame(g.value)]),
                 ].map(([val, label, count]) => (
                   <button
                     key={val}
@@ -962,8 +965,8 @@ function DeckBuilder({ showToast }) {
                     style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', height: 'auto' }}
                   >
                     <option value="all">{t('deck.allStatuses')}</option>
-                    <option value="ready">{t('deck.statusBattleReady')}</option>
-                    <option value="in_progress">{t('deck.statusBuildingCount')}</option>
+                    <option value="ready">{t('riftbound.targetReached')}</option>
+                    <option value="in_progress">{t('riftbound.belowTarget')}</option>
                     <option value="in_play">{t('deck.statusInPlayEmoji')}</option>
                   </select>
                 </div>
@@ -1127,7 +1130,7 @@ function DeckBuilder({ showToast }) {
                               gap: '3px'
                             }}>
                               {isMtg ? <Swords size={10} /> : <Zap size={10} />}
-                              {isMtg ? 'MTG' : 'Pokémon'}
+                              {gameLabel(deck.game || 'pokemon', true)}
                             </span>
 
                             {deck.format && (
@@ -1299,7 +1302,7 @@ function DeckBuilder({ showToast }) {
                                 gap: '3px'
                               }}>
                                 {isMtg ? <Swords size={10} /> : <Zap size={10} />}
-                                {isMtg ? 'MTG' : 'Pokémon'}
+                                {gameLabel(deck.game || 'pokemon', true)}
                               </span>
                             </div>
                             {deck.format && (
@@ -1399,7 +1402,7 @@ function DeckBuilder({ showToast }) {
                   <label className="form-group" style={{ margin: 0 }}>
                     {t('deck.format')}
                     <select className="input-control" value={deckDraft.format} onChange={(event) => setDeckDraft({ ...deckDraft, format: event.target.value })}>
-                      {(activeDeck.game === 'mtg' ? MTG_FORMATS : activeDeck.game === 'lorcana' ? LORCANA_FORMATS : POKEMON_FORMATS).map(format => <option key={format} value={format}>{format}</option>)}
+                      {(activeDeck.game === 'riftbound' ? RIFTBOUND_FORMATS : activeDeck.game === 'mtg' ? MTG_FORMATS : activeDeck.game === 'lorcana' ? LORCANA_FORMATS : POKEMON_FORMATS).map(format => <option key={format} value={format}>{format}</option>)}
                     </select>
                   </label>
                   <label className="form-group" style={{ margin: 0 }}>
@@ -1534,12 +1537,13 @@ function DeckBuilder({ showToast }) {
                   <LogOut size={14} /> Check Out for Play
                 </button>
               )}
-              <button className="btn btn-primary" onClick={startSimulator} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              {deckGame !== 'riftbound' && <button className="btn btn-primary" onClick={startSimulator} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <Play size={14} /> Draw Simulator
-              </button>
+              </button>}
             </div>
           </div>
 
+          {deckGame === 'riftbound' && <p role="status">{t('riftbound.deckNote')}</p>}
           {/* Checked out info banner */}
           {!!activeDeck.checked_out && (
             <div style={{
@@ -1616,7 +1620,7 @@ function DeckBuilder({ showToast }) {
                           const qtyInDeck = existingInDeck ? existingInDeck.quantity : 0;
                           const ownedQty = card.owned_qty || 0;
                           const isAtMaxOwned = qtyInDeck >= ownedQty;
-                          const isAtRuleMax = !isBasicEnergyOrLand(card, deckGame) && deckCountByName(activeDeck?.cards, card.name) >= 4;
+                          const isAtRuleMax = deckGame !== 'riftbound' && !isBasicEnergyOrLand(card, deckGame) && deckCountByName(activeDeck?.cards, card.name) >= 4;
                           const disabledAdd = savingCard || isAtMaxOwned || isAtRuleMax;
 
                           return (
@@ -1731,7 +1735,7 @@ function DeckBuilder({ showToast }) {
                                       <button
                                         className="btn btn-secondary btn-icon-only"
                                         style={{ width: '22px', height: '22px', padding: 0 }}
-                                        disabled={savingCard || card.quantity >= (card.owned_qty || 0) || (!isBasicEnergyOrLand(card, deckGame) && deckCountByName(activeDeck.cards, card.name) >= 4)}
+                                        disabled={savingCard || card.quantity >= (card.owned_qty || 0) || (deckGame !== 'riftbound' && !isBasicEnergyOrLand(card, deckGame) && deckCountByName(activeDeck.cards, card.name) >= 4)}
                                         onClick={() => handleUpdateCardQty(card.id, card.quantity + 1)}
                                       >
                                         +
@@ -1769,7 +1773,7 @@ function DeckBuilder({ showToast }) {
                                       <button className={`btn ${card.quantity === 1 ? 'btn-danger' : 'btn-secondary'} btn-icon-only`} style={{ width: '20px', height: '20px', fontSize: '0.7rem', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }} disabled={savingCard} onClick={() => handleUpdateCardQty(card.id, card.quantity - 1)} title={t(card.quantity === 1 ? 'deck.removeFromDeck' : 'deck.decreaseQty')}>
                                         {card.quantity === 1 ? <Trash2 size={10} /> : '-'}
                                       </button>
-                                      <button className="btn btn-secondary btn-icon-only" style={{ width: '20px', height: '20px', fontSize: '0.7rem', padding: 0 }} disabled={savingCard || card.quantity >= (card.owned_qty || 0) || (!isBasicEnergyOrLand(card, deckGame) && deckCountByName(activeDeck.cards, card.name) >= 4)} onClick={() => handleUpdateCardQty(card.id, card.quantity + 1)}>+</button>
+                                      <button className="btn btn-secondary btn-icon-only" style={{ width: '20px', height: '20px', fontSize: '0.7rem', padding: 0 }} disabled={savingCard || card.quantity >= (card.owned_qty || 0) || (deckGame !== 'riftbound' && !isBasicEnergyOrLand(card, deckGame) && deckCountByName(activeDeck.cards, card.name) >= 4)} onClick={() => handleUpdateCardQty(card.id, card.quantity + 1)}>+</button>
                                     </div>
                                   </div>
                                 </div>
@@ -1805,14 +1809,14 @@ function DeckBuilder({ showToast }) {
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
                       <span>{t('deck.uniqueCards')}</span>
-                      <strong style={{ color: 'var(--text-strong)' }}>{activeDeck.cards.length} {deckGame === 'mtg' ? t('deck.titlesCount', { count: activeDeck.cards.length }) : t('deck.speciesCount', { count: activeDeck.cards.length })}</strong>
+                      <strong style={{ color: 'var(--text-strong)' }}>{activeDeck.cards.length} {deckGame !== 'pokemon' ? t('deck.titlesCount', { count: activeDeck.cards.length }) : t('deck.speciesCount', { count: activeDeck.cards.length })}</strong>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
+                    {deckGame !== 'riftbound' && <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
                       <span>{t(deckGame === 'mtg' ? 'deck.basicLands' : 'deck.basicEnergy')}</span>
                       <strong style={{ color: 'var(--accent-yellow)' }}>
                         {activeDeck.cards.filter(c => isBasicEnergyOrLand(c, deckGame)).reduce((s, c) => s + c.quantity, 0)} {deckGame === 'mtg' ? t('deck.basicLandsCount', { count: activeDeck.cards.filter(c => isBasicEnergyOrLand(c, deckGame)).reduce((s, c) => s + c.quantity, 0) }) : t('deck.basicEnergyCount', { count: activeDeck.cards.filter(c => isBasicEnergyOrLand(c, deckGame)).reduce((s, c) => s + c.quantity, 0) })}
                       </strong>
-                    </div>
+                    </div>}
                   </div>
                 </div>
 
@@ -1932,7 +1936,13 @@ function DeckBuilder({ showToast }) {
               {showGamePicker() && (
               <div className="form-group">
                 <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-strong)', marginBottom: '0.4rem', display: 'block' }}>{t('deck.gameSystem')}</label>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${gameOptions().length}, 1fr)`, gap: '0.75rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.75rem' }}>
+                  {isGameEnabled('riftbound') && (
+                    <button type="button" className={`btn ${newDeckGame === 'riftbound' ? 'btn-primary' : 'btn-secondary'}`}
+                      onClick={() => { setNewDeckGame('riftbound'); setNewDeckCategory('Casual'); setNewDeckFormat('Casual'); setNewDeckTargetSize(40); }}>
+                      Riftbound
+                    </button>
+                  )}
                   {isGameEnabled('pokemon') && (
                     <div
                       onClick={() => {
@@ -2029,7 +2039,7 @@ function DeckBuilder({ showToast }) {
                     }}
                     style={{ fontSize: '0.85rem' }}
                   >
-                    {(newDeckGame === 'pokemon' ? POKEMON_FORMATS : (newDeckGame === 'lorcana' ? LORCANA_FORMATS : MTG_FORMATS)).map(fmt => (
+                    {(newDeckGame === 'riftbound' ? RIFTBOUND_FORMATS : newDeckGame === 'pokemon' ? POKEMON_FORMATS : (newDeckGame === 'lorcana' ? LORCANA_FORMATS : MTG_FORMATS)).map(fmt => (
                       <option key={fmt} value={fmt} style={{ background: '#1e293b', color: '#fff' }}>{fmt}</option>
                     ))}
                   </select>
@@ -2320,10 +2330,11 @@ function DeckBuilder({ showToast }) {
               value={effectiveExportFormat}
               onChange={e => setExportFormat(e.target.value)}
             >
-              <option value="ptcgl">{t('deck.formatPtcgl')}</option>
-              <option value="mtga">{t('deck.formatMtga')}</option>
-              <option value="plain">{t('deck.formatPlain')}</option>
-              <option value="buylist">{t('deck.formatBuylist')}</option>
+              {activeDeck?.game === 'riftbound' && <option value="riftbound">{t('riftbound.exactList')}</option>}
+              {activeDeck?.game !== 'riftbound' && <option value="ptcgl">{t('deck.formatPtcgl')}</option>}
+              {activeDeck?.game !== 'riftbound' && <option value="mtga">{t('deck.formatMtga')}</option>}
+              {activeDeck?.game !== 'riftbound' && <option value="plain">{t('deck.formatPlain')}</option>}
+              {activeDeck?.game !== 'riftbound' && <option value="buylist">{t('deck.formatBuylist')}</option>}
             </select>
             {effectiveExportFormat === 'buylist' && (
               <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '-0.5rem', marginBottom: '1rem' }}>

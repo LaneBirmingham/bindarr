@@ -1,13 +1,12 @@
+import { cardPriceText } from '../utils/cardPriceText';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Search, Plus, X, ShieldAlert, Check, MousePointerClick, Zap, Undo2, Maximize2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { priceText } from '../utils/formatPrice';
-import { resolveCardPrice } from '../utils/resolveCardPrice';
 import CardEntryFields from './CardEntryFields';
 import CardImageZoom from './CardImageZoom';
 import { translateJapaneseName, POKEMON_EN_TO_JP, getCardDisplayName } from '../utils/langHelper';
 import { useMultiSelect } from '../utils/useMultiSelect';
-import { CONDITIONS, PRINTINGS } from '../utils/cardOptions';
+import { CONDITIONS, getPrintings } from '../utils/cardOptions';
 import { langName, isEnglish, displayName, translatedName, setReference, setCode, getLanguagesForGame, isLanguageSupported } from '../utils/languages';
 import { defaultGame, gameOptions, showGamePicker, gameLabel } from '../utils/games';
 import CardImage from './CardImage';
@@ -109,7 +108,7 @@ function CardSearch({ onAddSuccess, showToast, setActiveTab }) {
         const seen = new Set();
         setKnownSets(rows
           .filter(s => !s.game || s.game === game)
-          .map(s => ({ code: String(s.id || '').replace(/^mtg-/, ''), name: s.name }))
+          .map(s => ({ code: String(s.id || '').replace(/^(?:mtg|riftbound)-/, ''), name: s.name }))
           .filter(s => s.code && !seen.has(s.code) && seen.add(s.code))
           .reverse()); // newest first — that is what people are adding
       })
@@ -567,7 +566,7 @@ function CardSearch({ onAddSuccess, showToast, setActiveTab }) {
                 <input
                   type="text"
                   className="input-control"
-                  placeholder={t(game === 'mtg' ? 'search.namePlaceholderMtg' : 'search.namePlaceholderPokemon')}
+                  placeholder={t(game === 'riftbound' ? 'riftbound.namePlaceholder' : game === 'mtg' ? 'search.namePlaceholderMtg' : 'search.namePlaceholderPokemon')}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   style={{ width: '100%', paddingLeft: '2.5rem' }}
@@ -616,7 +615,7 @@ function CardSearch({ onAddSuccess, showToast, setActiveTab }) {
                 type="text"
                 className="input-control"
                 list="known-set-codes"
-                placeholder={t(game === 'mtg' ? 'search.setsPlaceholderMtg' : 'search.setsPlaceholderPokemon')}
+                placeholder={t(game === 'riftbound' ? 'riftbound.searchSets' : game === 'mtg' ? 'search.setsPlaceholderMtg' : 'search.setsPlaceholderPokemon')}
                 value={setCodeQuery}
                 onChange={(e) => setSetCodeQuery(e.target.value)}
               />
@@ -631,7 +630,7 @@ function CardSearch({ onAddSuccess, showToast, setActiveTab }) {
           <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
             <button type="submit" className="btn btn-primary" style={{ flex: '1 1 220px' }}>
               <Search size={18} />
-              {t('search.submit')}
+              {t(game === 'riftbound' ? 'riftbound.searchCatalogue' : 'search.submit')}
             </button>
             <button
               type="button"
@@ -684,7 +683,7 @@ function CardSearch({ onAddSuccess, showToast, setActiveTab }) {
               {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             <select className="select-control" value={printing} onChange={(e) => setPrinting(e.target.value)} style={{ fontSize: '0.75rem', maxWidth: '150px' }}>
-              {PRINTINGS.map(p => <option key={p} value={p}>{p}</option>)}
+              {getPrintings(game).map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
             <input
               type="number"
@@ -828,7 +827,7 @@ function CardSearch({ onAddSuccess, showToast, setActiveTab }) {
             {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
           <select className="select-control" value={printing} onChange={(e) => setPrinting(e.target.value)} style={{ fontSize: '0.72rem', maxWidth: '150px', padding: '0.3rem 0.4rem' }}>
-            {PRINTINGS.map(p => <option key={p} value={p}>{p}</option>)}
+            {getPrintings(game).map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
           <input
             type="number"
@@ -902,7 +901,7 @@ function CardSearch({ onAddSuccess, showToast, setActiveTab }) {
                   ) : null}
                   <div className="tcg-card-meta">
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{card.set_name}</span>
-                    <span className="tcg-card-price">{priceText(card.price_trend, card.price_currency)}</span>
+                    <span className="tcg-card-price">{cardPriceText(card, t)}</span>
                   </div>
                 </div>
               </div>
@@ -983,7 +982,7 @@ function CardSearch({ onAddSuccess, showToast, setActiveTab }) {
               </div>
               <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('search.tcgMarketPrice', { printing })}</div>
-                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--accent-yellow)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{priceText(resolveCardPrice(selectedCard, printing), selectedCard.price_currency)}</div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--accent-yellow)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cardPriceText(selectedCard, t, printing)}</div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{t('search.rarityLabel')} <span style={{ color: 'var(--text-strong)', fontWeight: 600 }}>{selectedCard.rarity}</span></div>
               </div>
             </div>

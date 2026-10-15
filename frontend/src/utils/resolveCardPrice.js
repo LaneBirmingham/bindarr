@@ -9,6 +9,7 @@ export function resolveCardPrice(card, printing) {
   if (!card) return 0;
   // Owner-set or graded-provider value for this copy. See the backend twin.
   if (card.market_value > 0) return card.market_value;
+  if (card.game === 'riftbound' || String(card.card_id || card.id || '').startsWith('riftbound-')) return null;
   if (printing === 'Holofoil' && card.price_holofoil > 0) return card.price_holofoil;
   if (printing === 'Reverse Holofoil' && card.price_reverse_holofoil > 0) return card.price_reverse_holofoil;
   if (printing === 'Normal' && card.price_normal > 0) return card.price_normal;

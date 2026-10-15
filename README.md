@@ -4,7 +4,7 @@
 
 # Bindarr
 
-**Self-hosted collection manager for Pokémon, Magic: The Gathering, and Disney Lorcana cards.**
+**Self-hosted collection manager for Pokémon, Magic: The Gathering, Disney Lorcana, and Riftbound cards.**
 
 Identify cards with your phone camera, track prices, record which binder page and slot each card lives in, and pull decks back out again.
 
@@ -417,3 +417,21 @@ This is the language of the *app*. The language a card was printed in is a separ
 ## License
 
 [MIT](LICENSE).
+
+
+### Riftbound (personal, non-commercial)
+
+Riftbound uses a bundled English catalogue and content-addressed local artwork;
+search, set/collector-number browsing and collection/deck operations require no
+third-party service. Prices are explicitly unavailable because no approved
+exact-printing price source has been verified. Owner-entered values remain
+separate from provider prices. Mixed-game valuations are labelled partial.
+
+Scanning uses the existing Cornelius/Milo pipeline: install the operator-managed
+models, then build **Riftbound / English** in **Admin → Catalogs**. No separate
+scanner or sibling-project runtime is needed. See [Riftbound support and verification](docs/riftbound.md)
+for provenance, regeneration, checks and limitations.
+
+Bindarr was created under Riot Games' "Legal Jibber Jabber" policy using assets
+owned by Riot Games. Riot Games does not endorse or sponsor this project.
+[Riot Games fan project policy](https://www.riotgames.com/en/legal).

@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { resolveCardPrice, isVintageSet, parseSqliteUtc } = require('../utils/priceHelpers');
+const { resolveCardPrice, priceMetadata, valuationMetadata, isVintageSet, parseSqliteUtc } = require('../utils/priceHelpers');
 
 const router = express.Router();
 
@@ -25,6 +25,7 @@ router.get('/stats', async (req, res) => {
       WHERE c.user_id = ?${gameFilter}
     `;
     const rows = await db.all(query, statsParams);
+    const valuation = valuationMetadata(rows);
 
     let totalCards = 0;
     let uniqueCards = rows.length;
@@ -117,10 +118,11 @@ router.get('/stats', async (req, res) => {
       // Set
       const set = row.set_name || 'Other';
       if (!setCounts[row.set_id]) {
-        setCounts[row.set_id] = { name: set, count: 0, value: 0 };
+        setCounts[row.set_id] = { name: set, count: 0, value: 0, priced: false };
       }
       setCounts[row.set_id].count += qty;
       setCounts[row.set_id].value += qty * price;
+      if (price !== null) setCounts[row.set_id].priced = true;
 
       // Location
       const loc = row.location_name || 'Unassigned';
@@ -145,6 +147,7 @@ router.get('/stats', async (req, res) => {
         -- raw price has to be able to reach this list, and ranking it by the raw
         -- price is exactly how it never would.
         WHEN c.market_value IS NOT NULL AND c.market_value > 0 THEN c.market_value
+        WHEN cc.game = 'riftbound' THEN NULL
         WHEN c.printing = 'Holofoil' AND cc.price_holofoil IS NOT NULL AND cc.price_holofoil > 0 THEN cc.price_holofoil
         WHEN c.printing = 'Reverse Holofoil' AND cc.price_reverse_holofoil IS NOT NULL AND cc.price_reverse_holofoil > 0 THEN cc.price_reverse_holofoil
         WHEN c.printing = 'Normal' AND cc.price_normal IS NOT NULL AND cc.price_normal > 0 THEN cc.price_normal
@@ -154,8 +157,8 @@ router.get('/stats', async (req, res) => {
       LIMIT 6
     `;
     const topValuableRows = await db.all(topValuableQuery, statsParams);
-    const topValuable = topValuableRows.map(row => ({
-      ...row,
+    const topValuable = topValuableRows.filter(row => resolveCardPrice(row) !== null).map(row => ({
+      ...row, ...priceMetadata(row),
       price_trend: resolveCardPrice(row)
     }));
 
@@ -224,20 +227,21 @@ router.get('/stats', async (req, res) => {
       ORDER BY c.added_at DESC
       LIMIT 6
     `, statsParams);
-    const recentAdditions = recentRows.map(row => ({ ...row, price_trend: resolveCardPrice(row) }));
+    const recentAdditions = recentRows.map(row => ({ ...row, ...priceMetadata(row), price_trend: resolveCardPrice(row) }));
 
     const gainAbs = totalValue - totalSpent;
     const roi = {
-      abs: parseFloat(gainAbs.toFixed(2)),
-      pct: totalSpent > 0 ? parseFloat(((gainAbs / totalSpent) * 100).toFixed(1)) : null
+      abs: valuation.unpricedCards ? null : parseFloat(gainAbs.toFixed(2)),
+      pct: !valuation.unpricedCards && totalSpent > 0 ? parseFloat(((gainAbs / totalSpent) * 100).toFixed(1)) : null
     };
-    const avgCardValue = totalCards > 0 ? parseFloat((totalValue / totalCards).toFixed(2)) : 0.0;
+    const avgCardValue = valuation.unpricedCards ? null : (totalCards > 0 ? parseFloat((totalValue / totalCards).toFixed(2)) : 0.0);
 
     res.json({
       summary: {
+        ...valuation,
         totalCards,
         uniqueCards,
-        totalValue: parseFloat(totalValue.toFixed(2)),
+        totalValue: valuation.valuationAvailable ? parseFloat(totalValue.toFixed(2)) : null,
         totalSpent: parseFloat(totalSpent.toFixed(2)),
         roi,
         avgCardValue,
@@ -269,7 +273,7 @@ router.get('/stats', async (req, res) => {
         id,
         name: setCounts[id].name,
         count: setCounts[id].count,
-        value: parseFloat(setCounts[id].value.toFixed(2))
+        value: setCounts[id].priced ? parseFloat(setCounts[id].value.toFixed(2)) : null
       })).sort((a, b) => b.value - a.value).slice(0, 8),
       locations: Object.keys(locationCounts).map(name => ({ name, value: locationCounts[name] })),
       topValuable,
@@ -291,7 +295,7 @@ router.get('/stats/history', async (req, res) => {
 
     // Retrieve all collection items to compute history
     const query = `
-      SELECT c.quantity, c.added_at, c.printing, c.market_value, cc.id as card_id, cc.price_trend, cc.price_normal, cc.price_holofoil, cc.price_reverse_holofoil, cc.price_1st_edition
+      SELECT c.quantity, c.added_at, c.printing, c.market_value, cc.game, cc.id as card_id, cc.price_trend, cc.price_normal, cc.price_holofoil, cc.price_reverse_holofoil, cc.price_1st_edition
       FROM collection c
       JOIN card_cache cc ON c.card_id = cc.id
       WHERE c.user_id = ?${gameFilter}
@@ -328,6 +332,7 @@ router.get('/stats/history', async (req, res) => {
       // card down. There is no per-copy history to draw instead, so it holds flat
       // at the value on record rather than reporting the raw card's movement.
       if (item.market_value > 0) return item.market_value;
+      if (resolveCardPrice(item) === null) return null;
       const hist = historyByCard[item.card_id];
       if (!hist || hist.length === 0) return resolveCardPrice(item);
       let best = null;
@@ -371,16 +376,20 @@ router.get('/stats/history', async (req, res) => {
       const targetDate = new Date(targetTime);
 
       let totalValue = 0;
+      const present = [];
       items.forEach(item => {
         const addedTime = parseSqliteUtc(item.added_at).getTime();
         if (addedTime <= targetTime) {
+          present.push(item);
           totalValue += item.quantity * realPriceAt(item, targetTime);
         }
       });
 
+      const valuation = valuationMetadata(present);
       historyData.push({
+        ...valuation,
         date: formatLabel(targetDate),
-        value: parseFloat(totalValue.toFixed(2))
+        value: valuation.valuationAvailable ? parseFloat(totalValue.toFixed(2)) : null
       });
     }
 
@@ -414,6 +423,7 @@ router.get('/stats/networth', async (req, res) => {
       WHERE c.user_id = ? AND c.list_type = 'collection'${gameFilter}
     `, params);
 
+    const valuation = valuationMetadata(rows);
     let totalCards = 0, totalValue = 0, totalSpent = 0;
     const byGame = {};
     const currencies = new Set();
@@ -425,23 +435,25 @@ router.get('/stats/networth', async (req, res) => {
       totalSpent += qty * (row.purchase_price || 0);
       if (value > 0) currencies.add(row.price_currency || 'USD');
       const g = row.game || 'unknown';
-      if (!byGame[g]) byGame[g] = { cards: 0, value: 0 };
+      if (!byGame[g]) byGame[g] = { cards: 0, value: 0, rows: [] };
+      byGame[g].rows.push(row);
       byGame[g].cards += qty;
       byGame[g].value += value;
     }
 
     const round = (n) => parseFloat(n.toFixed(2));
     res.json({
-      totalValue: round(totalValue),
+      ...valuation,
+      totalValue: valuation.valuationAvailable ? round(totalValue) : null,
       totalSpent: round(totalSpent),
       // The unrealized gain, which is the number a finance tracker actually wants
       // next to the total: value minus what it cost. Null percentage rather than
       // zero when nothing has a purchase price, because "0% return" is a claim.
-      gain: round(totalValue - totalSpent),
-      gainPct: totalSpent > 0 ? parseFloat((((totalValue - totalSpent) / totalSpent) * 100).toFixed(1)) : null,
+      gain: valuation.unpricedCards ? null : round(totalValue - totalSpent),
+      gainPct: !valuation.unpricedCards && totalSpent > 0 ? parseFloat((((totalValue - totalSpent) / totalSpent) * 100).toFixed(1)) : null,
       totalCards,
       uniqueEntries: rows.length,
-      byGame: Object.fromEntries(Object.entries(byGame).map(([g, v]) => [g, { cards: v.cards, value: round(v.value) }])),
+      byGame: Object.fromEntries(Object.entries(byGame).map(([g, v]) => [g, { cards: v.cards, value: valuationMetadata(v.rows).valuationAvailable ? round(v.value) : null, ...valuationMetadata(v.rows) }])),
       // Plural and honest: providers quote in different currencies (Scryfall and
       // TCGplayer in USD, TCGdex in EUR), and the totals above sum them as-is —
       // the same arithmetic the dashboard has always done. More than one entry

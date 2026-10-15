@@ -1478,5 +1478,19 @@
   "compartment.stackedHere": "{count} copies stacked in this pocket",
   "settings.linkContainer": "Container Share Links",
   "settings.copied.container": "Copied public container link to clipboard.",
-  "shared.errLoadContainer": "Failed to load shared container."
+  "shared.errLoadContainer": "Failed to load shared container.",
+  "riftbound.searchCatalogue": "Search local catalogue",
+  "riftbound.namePlaceholder": "Search Riftbound card names",
+  "riftbound.priceUnavailable": "Price unavailable",
+  "riftbound.partialValuation": "Partial valuation — Riftbound prices unavailable",
+  "riftbound.notice": "Bindarr was created under Riot Games' \"Legal Jibber Jabber\" policy using assets owned by Riot Games. Riot Games does not endorse or sponsor this project.",
+  "riftbound.policy": "Riot Games fan project policy",
+  "riftbound.deckNote": "Casual inventory list. Main deck, runes, legend and battlefields are grouped by card type; format legality is not validated.",
+  "riftbound.scanNote": "Riftbound uses the bundled English snapshot and local art. Build its scan catalogue in Admin → Catalogs.",
+  "riftbound.searchSets": "Search Riftbound sets",
+  "riftbound.exactList": "Riftbound list (exact printings)",
+  "riftbound.valuationNote_one": "{count} card has no approved exact-printing price. Totals exclude unpriced cards.",
+  "riftbound.valuationNote_other": "{count} cards have no approved exact-printing price. Totals exclude unpriced cards.",
+  "riftbound.targetReached": "Target size reached",
+  "riftbound.belowTarget": "Below target size"
 }

@@ -1,3 +1,4 @@
+import { cardPriceText } from '../utils/cardPriceText';
 import { useState, useEffect, useMemo } from 'react';
 import { Search, Trash2, Edit2, LayoutGrid, List, SlidersHorizontal, X, MousePointerClick } from 'lucide-react';
 import { getCardDisplayName, translateJapaneseName } from '../utils/langHelper';
@@ -623,7 +624,7 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
       {!loading && !selectMode && (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', fontSize: '0.78rem', color: 'var(--text-secondary)', flexWrap: 'wrap', gap: '0.5rem' }}>
           <span><strong style={{ color: 'var(--text-strong)' }}>{displayCards.length}</strong> {t('collection.cardUnit', { count: displayCards.length })}</span>
-          <span>{t('collection.totalValue')} <strong style={{ color: 'var(--accent-yellow)' }}>{priceText(totalValue)}</strong></span>
+          <span>{t('collection.totalValue')} <strong style={{ color: 'var(--accent-yellow)' }}>{displayCards.some(c => c.game === 'riftbound' && !(c.market_value > 0)) ? (displayCards.every(c => c.game === 'riftbound' && !(c.market_value > 0)) ? t('riftbound.priceUnavailable') : `${priceText(totalValue)} · ${t('riftbound.partialValuation')}`) : priceText(totalValue)}</strong></span>
         </div>
       )}
 
@@ -788,7 +789,7 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
                   <div className="tcg-card-name">{getCardDisplayName(item.name, item.language, item.printed_name)}</div>
                   <div className="tcg-card-meta">
                     <span style={{ fontSize: '0.7rem' }}>{item.set_name} • #{item.number}</span>
-                    <span className="tcg-card-price">{priceText(item.price_trend, item.price_currency)}</span>
+                    <span className="tcg-card-price">{cardPriceText(item, t)}</span>
                   </div>
                 </div>
               </div>
@@ -859,7 +860,7 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
                       {item.quantity > 1 && (
                         <div style={{ fontWeight: 700, color: 'var(--text-strong)', fontSize: '0.85rem' }}>x{item.quantity}</div>
                       )}
-                      <div style={{ fontSize: '0.7rem', color: 'var(--accent-yellow)', fontWeight: 600 }}>{priceText(item.price_trend, item.price_currency)}</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--accent-yellow)', fontWeight: 600 }}>{cardPriceText(item, t)}</div>
                     </td>
                   </tr>
                   );

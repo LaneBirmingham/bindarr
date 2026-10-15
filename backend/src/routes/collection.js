@@ -4,6 +4,8 @@ const tcgApi = require('../tcgApi');
 const tcgdexApi = require('../tcgdexApi');
 const scryfallApi = require('../scryfallApi');
 const lorcastApi = require('../lorcastApi');
+const riftboundApi = require('../riftboundApi');
+const { isGame } = require('../utils/games');
 const cvScan = require('../cvScan');
 const tcgplayerCatalog = require('../tcgplayerCatalog');
 const languages = require('../utils/languages');
@@ -112,6 +114,8 @@ function normalizeSearchParams({ name = '', number = '', set = '', q = '' }) {
 router.all('/search', searchLimiter, async (req, res) => {
   const query = req.method === 'POST' ? { ...req.query, ...req.body } : req.query;
   const { name: rawName, number: rawNumber, set: rawSet, scope = 'database', game = 'pokemon', lang, prints, q, image, cropped } = query;
+  if (!isGame(game)) return res.status(400).json({ error: 'Invalid game' });
+  if (game === 'riftbound' && !languages.isEnglish(lang)) return res.json([]);
   const { name, number, set } = normalizeSearchParams({ name: rawName, number: rawNumber, set: rawSet, q });
   // 1-based page over `limit`-sized pages. 250 is the pokemontcg.io ceiling and
   // a sane cap on how much one Scryfall search will page through per request.
@@ -120,7 +124,7 @@ router.all('/search', searchLimiter, async (req, res) => {
   try {
     // Every provider takes the same options object and ignores what does not
     // apply to it, so there is one call here rather than a branch per provider.
-    const api = game === 'mtg' ? scryfallApi : (game === 'lorcana' ? lorcastApi : await pokemonApiFor(lang));
+    const api = game === 'mtg' ? scryfallApi : game === 'lorcana' ? lorcastApi : game === 'riftbound' ? riftboundApi : await pokemonApiFor(lang);
     let { cards, total } = await api.searchCards({
       name, number, set, scope, userId: req.user.id, lang,
       apiKey: req.user.tcg_api_key, allPrints: prints === '1', page, limit,
@@ -186,7 +190,7 @@ router.get('/collection/cert/:certNumber', searchLimiter, async (req, res) => {
     // a 1986 Fleer basketball card would return nonsense candidates rather than an
     // honest empty list.
     const brand = `${cert.brand || ''} ${cert.category || ''}`.toUpperCase();
-    const game = /POKEMON/.test(brand) ? 'pokemon' : (/MAGIC|GATHERING/.test(brand) ? 'mtg' : (/LORCANA/.test(brand) ? 'lorcana' : null));
+    const game = /POKEMON/.test(brand) ? 'pokemon' : (/MAGIC|GATHERING/.test(brand) ? 'mtg' : (/LORCANA/.test(brand) ? 'lorcana' : (/RIFTBOUND/.test(brand) ? 'riftbound' : null)));
     let candidates = [];
     if (game) {
       const name = psaApi.searchableName(cert.subject);
@@ -195,7 +199,7 @@ router.get('/collection/cert/:certNumber', searchLimiter, async (req, res) => {
         // discriminator between printings of the same name, and the search treats
         // it as optional so a label without one still returns something.
         const number = cert.card_number || '';
-        const api = game === 'mtg' ? scryfallApi : (game === 'lorcana' ? lorcastApi : await pokemonApiFor(null));
+        const api = game === 'mtg' ? scryfallApi : game === 'lorcana' ? lorcastApi : game === 'riftbound' ? riftboundApi : await pokemonApiFor(null);
         ({ cards: candidates } = await api.searchCards({
           name, number, userId: req.user.id, apiKey: req.user.tcg_api_key,
           allPrints: true, limit: 24,
@@ -220,7 +224,7 @@ router.get('/collection/cert/:certNumber', searchLimiter, async (req, res) => {
 // match nothing. Read-only counts, no build controls.
 router.get('/scan-sets', async (req, res) => {
   const { game = 'pokemon', lang } = req.query;
-  if (game !== 'mtg' && game !== 'pokemon' && game !== 'lorcana') return res.status(400).json({ error: 'Invalid game' });
+  if (!isGame(game)) return res.status(400).json({ error: 'Invalid game' });
   try {
     // `builtLangs` rides along because the scanner's language picker has no other
     // way to know: it offered all eleven languages, and for ten of them a Pokémon
@@ -276,7 +280,7 @@ async function pokemonBySetNumber(langName, number, setId, tcgApiKey) {
 router.post('/scan-match', searchLimiter, async (req, res) => {
   try {
     const { game = 'pokemon', image, set = '', lang, cropped = false } = req.body || {};
-    if (game !== 'mtg' && game !== 'pokemon' && game !== 'lorcana') return res.status(400).json({ error: 'Invalid game' });
+    if (!isGame(game)) return res.status(400).json({ error: 'Invalid game' });
     if (!image || typeof image !== 'string') return res.status(400).json({ error: 'Missing image' });
     const base64 = image.includes(',') ? image.slice(image.indexOf(',') + 1) : image;
     const buf = Buffer.from(base64, 'base64');
@@ -333,13 +337,17 @@ router.post('/scan-match', searchLimiter, async (req, res) => {
           const use = localized || card;
           return { ...cand, name: use.name, set: use.set_id, number: use.number, card: use };
         }
+        if (game === 'riftbound') {
+          const card = await cardApi.getCardById(cand.cardId, { game });
+          return card ? { ...cand, name: card.name, set: card.set_id, number: card.number, card } : cand;
+        }
         if (game === 'lorcana') {
           let row = await db.get(
             `SELECT * FROM card_cache WHERE id = ? AND image_url IS NOT NULL AND image_url != '' LIMIT 1`,
             [cand.cardId]
           );
           if (!row) {
-            const card = await lorcastApi.getCardById(cand.cardId).catch(() => null);
+            const card = await cardApi.getCardById(cand.cardId, { game }).catch(() => null);
             if (card) return { ...cand, name: card.name, set: card.set_id, number: card.number, card };
             return cand;
           }
@@ -667,6 +675,8 @@ async function addCardToCollection(user, body) {
     throw new AddCardError(400, 'card_id is required');
   }
 
+  if (!isGame(game)) throw new AddCardError(400, 'Invalid game');
+
   // Grading, validated here rather than at the two call sites, so the single add
   // and the bulk add cannot disagree about what a slab is.
   if (!GRADERS.includes(grader)) {
@@ -730,9 +740,13 @@ async function addCardToCollection(user, body) {
     // while displaying the name the card is actually printed with.
     card = await tcgdexApi.learnEnglishName(card);
 
-    const effectiveGame = (req.body.game && req.body.game !== 'pokemon')
-      ? req.body.game
-      : (card.game || cardApi.gameOf(cardId));
+    const effectiveGame = card.game || cardApi.gameOf(cardId);
+    if (req.body.game && req.body.game !== 'pokemon' && req.body.game !== effectiveGame) {
+      throw new AddCardError(400, 'Card and collection game must match');
+    }
+    if (!languages.isLanguageSupported(effectiveGame, language)) {
+      throw new AddCardError(400, 'Language is not supported for this game');
+    }
 
     if (location_id) {
       const loc = await db.get(`SELECT id FROM locations WHERE id = ? AND user_id = ?`, [location_id, req.user.id]);
@@ -831,6 +845,10 @@ router.get('/cards/:id/printing', async (req, res) => {
     }
 
     let card = await db.get(`SELECT * FROM card_cache WHERE id = ?`, [cardId]);
+    if (cardApi.gameOf(cardId, game) === 'riftbound') {
+      if (!languages.isEnglish(targetLang)) return res.status(400).json({ error: 'Riftbound snapshot supports English only' });
+      card = await cardApi.getCardById(cardId, { game });
+    }
     if (!card) {
       card = await cardApi.getCardById(cardId, { game, tcgApiKey: req.user?.tcg_api_key });
     }
@@ -925,9 +943,13 @@ router.put('/collection/:id', async (req, res) => {
     grader, grade, cert_number, market_value, card_id
   } = req.body;
 
+  if (game !== undefined && !isGame(game)) return res.status(400).json({ error: 'Invalid game' });
+
   try {
     const entry = await db.get(`SELECT * FROM collection WHERE id = ? AND user_id = ?`, [id, req.user.id]);
     if (!entry) return res.status(404).json({ error: 'Collection entry not found' });
+    if (game !== undefined && game !== entry.game) return res.status(400).json({ error: 'Card and collection game must match' });
+    if (language !== undefined && !languages.isLanguageSupported(entry.game, language)) return res.status(400).json({ error: 'Language is not supported for this game' });
 
     const isMoving = location_id !== undefined && location_id !== entry.location_id;
     let finalCompartmentId = entry.compartment_id;

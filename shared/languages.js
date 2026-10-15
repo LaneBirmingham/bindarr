@@ -1,5 +1,5 @@
 export default [
-  { "code": "en", "name": "English", "scryfall": "en", "tcgdex": "en", "games": ["pokemon", "mtg", "lorcana"] },
+  { "code": "en", "name": "English", "scryfall": "en", "tcgdex": "en", "games": ["pokemon", "mtg", "lorcana", "riftbound"] },
   { "code": "ja", "name": "Japanese", "scryfall": "ja", "tcgdex": "ja", "games": ["pokemon", "mtg", "lorcana"] },
   { "code": "de", "name": "German", "scryfall": "de", "tcgdex": "de", "games": ["pokemon", "mtg", "lorcana"] },
   { "code": "fr", "name": "French", "scryfall": "fr", "tcgdex": "fr", "games": ["pokemon", "mtg", "lorcana"] },

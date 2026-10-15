@@ -10,6 +10,19 @@ function parseSqliteUtc(str) {
   return /Z$|[+-]\d\d:\d\d$/.test(str) ? new Date(str) : new Date(str.replace(' ', 'T') + 'Z');
 }
 
+function isRiftboundCard(card) {
+  return !!card && (card.game === 'riftbound' || String(card.card_id || card.id || '').startsWith('riftbound-'));
+}
+
+function priceMetadata(card) {
+  if (!isRiftboundCard(card)) return {};
+  return card.market_value > 0
+    ? { price_status: 'manual' }
+    : { price_status: 'unavailable', price_unavailable_reason: 'no-approved-exact-printing-source' };
+}
+
+// Unknown Riftbound prices remain null, including rows with stale/foreign
+// provider columns. An explicit owner value is still a useful per-copy value.
 function resolveCardPrice(card) {
   if (!card) return 0;
   // A value set on the copy wins over every provider price. It is either what the
@@ -18,6 +31,7 @@ function resolveCardPrice(card) {
   // price, and the raw price is all the card APIs quote. Only rows selected with
   // collection.market_value carry it, so a bare card_cache row is unaffected.
   if (card.market_value > 0) return card.market_value;
+  if (isRiftboundCard(card)) return null;
   if (card.printing === 'Holofoil' && card.price_holofoil !== null && card.price_holofoil > 0) {
     return card.price_holofoil;
   }
@@ -37,6 +51,24 @@ function resolveCardPrice(card) {
   return card.price_trend || 0;
 }
 
+// Totals are subtotals when a game has no approved price source. Carry coverage
+// with every aggregate so an unknown value is never presented as a zero quote.
+function valuationMetadata(rows) {
+  let totalCards = 0, unpricedCards = 0;
+  for (const row of rows) {
+    const qty = row.quantity || 1;
+    totalCards += qty;
+    if (resolveCardPrice(row) === null) unpricedCards += qty;
+  }
+  const valuationAvailable = !unpricedCards || unpricedCards < totalCards;
+  return {
+    unpricedCards,
+    valuationAvailable,
+    partialValuation: unpricedCards > 0 && valuationAvailable,
+    price_status: !unpricedCards ? 'available' : (valuationAvailable ? 'partial' : 'unavailable'),
+  };
+}
+
 // Hydrate a raw card_cache row: its array columns are stored as JSON strings,
 // so parse them back to arrays. Missing columns (e.g. color_identity on a
 // Pokémon row) become []. Returns a shallow copy; the raw row is untouched.
@@ -44,6 +76,7 @@ function parseCardRow(row) {
   if (!row) return row;
   return {
     ...row,
+    ...priceMetadata(row),
     subtypes: JSON.parse(row.subtypes || '[]'),
     types: JSON.parse(row.types || '[]'),
     color_identity: JSON.parse(row.color_identity || '[]'),
@@ -201,6 +234,9 @@ module.exports = {
   DEFAULT_PRICE_REFRESH_DAYS,
   PRICE_SWEEP_INTERVAL_MS,
   resolveCardPrice,
+  priceMetadata,
+  valuationMetadata,
+  isRiftboundCard,
   parseCardRow,
   rebalanceCompartmentPositions,
   isVintageSet,

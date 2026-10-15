@@ -47,7 +47,13 @@ async function validateDeckAddition({ deckId, userId, cardId, newQty, dbClient }
   const deck = await client.get(`SELECT game FROM decks WHERE id = ? AND user_id = ?`, [deckId, userId]);
   const game = (deck && deck.game) || card.game || 'pokemon';
 
-  if (!isBasicEnergyOrLand(card, game)) {
+  if (card.game && card.game !== game) {
+    return { ok: false, error: 'Card and deck game must match.' };
+  }
+
+  // Riftbound lists are casual lists here, not tournament legality claims. Keep
+  // the owned-copy cap but do not apply another game's four-copy construction rule.
+  if (game !== 'riftbound' && !isBasicEnergyOrLand(card, game)) {
     // Copies of the same NAME already in the deck under a different card_id
     // (alt arts / reprints) count toward the 4-card limit.
     const otherRow = await client.get(

@@ -16,6 +16,7 @@ const db = require('./db');
 const tcgApi = require('./tcgApi');
 const scryfallApi = require('./scryfallApi');
 const lorcastApi = require('./lorcastApi');
+const riftboundApi = require('./riftboundApi');
 
 // Which module owns the Pokémon `sets` table. Asked per call rather than resolved
 // once: the provider is a setting an admin can change while the server is up, and
@@ -256,6 +257,9 @@ db.initDb()
     // table follows the same setting the cards do — this used to be pokemontcg.io
     // unconditionally, so a TCGdex install browsed a set list numbered by a
     // provider none of its cards came from.
+    // The bundled catalogue is ready independently of remote provider warmups.
+    await riftboundApi.cacheAllCards();
+    await riftboundApi.fetchAndCacheSets();
     await (await pokemonSetSource()).fetchAndCacheSets();
     await scryfallApi.fetchAndCacheSets();
     await lorcastApi.fetchAndCacheSets();
@@ -279,7 +283,7 @@ db.initDb()
     // pays the load itself.
     try {
       const cvScan = require('./cvScan');
-      const warm = ['mtg', 'pokemon', 'lorcana'].filter(g => cvScan.isBuilt(g));
+      const warm = require('./utils/games').GAMES.filter(g => cvScan.isBuilt(g));
       for (const g of warm) {
         cvScan.load(g).catch(err => console.warn(`cvScan ${g} warm-up failed:`, err.message));
         // Locally built non-English catalogs too (e.g. German Pokémon, #80): they
@@ -305,6 +309,7 @@ db.initDb()
         await (await pokemonSetSource()).fetchAndCacheSets(true);
         await scryfallApi.fetchAndCacheSets(true);
         await lorcastApi.fetchAndCacheSets(true);
+        await riftboundApi.fetchAndCacheSets(true);
         await loadSetsCache(db);
         await autoUpdateCatalogs();
       } catch (err) {
@@ -407,6 +412,25 @@ app.use('/api/admin', adminRoutes);
 // Ahead of the bare '/api' mounts so nothing shadows it. Its reads are
 // deliberately unauthenticated — a public shared collection renders card art too.
 app.use('/api/card-art', cardArtRoutes);
+// Shared collections need card images without a session. Restrict filenames to
+// the content-addressed snapshot; no remote proxy or arbitrary filesystem paths.
+const riftboundAttribution = (res) => {
+  res.set('X-Riftbound-Attribution', riftboundApi.NOTICE);
+  res.set('Link', '</api/riftbound/attribution>; rel="copyright"');
+};
+app.get('/api/riftbound/attribution', (req, res) => {
+  riftboundAttribution(res);
+  res.json({ notice: riftboundApi.NOTICE, policy: 'https://developer.riotgames.com/policies/riftbound' });
+});
+app.get('/api/riftbound/art/:file', (req, res) => {
+  riftboundAttribution(res);
+  const imagePath = riftboundApi.localArtPath(`/api/riftbound/art/${req.params.file}`);
+  if (!imagePath) return res.status(404).json({ error: 'Artwork not found' });
+  res.set('Cache-Control', 'public, max-age=31536000, immutable');
+  res.sendFile(imagePath, (error) => {
+    if (error && !res.headersSent) res.status(404).json({ error: 'Artwork not found' });
+  });
+});
 
 // --- AUTHENTICATION GATE ---
 // ONE gate for every remaining /api route, rather than a router.use in each file.

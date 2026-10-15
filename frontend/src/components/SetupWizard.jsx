@@ -395,6 +395,7 @@ export default function SetupWizard({ user, onUpdateUser, onClose, showToast }) 
               <Failure what={`catalog:${c.game}`} />
             </div>
           ))}
+          {shownGames.includes('riftbound') && <p style={body}>{t('riftbound.scanNote')}</p>}
           {shownGames.includes('lorcana') && (
             <div style={{ ...row, opacity: 0.9, background: 'rgba(255,255,255,0.03)' }}>
               <div style={{ minWidth: 0 }}>

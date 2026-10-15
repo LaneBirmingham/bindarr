@@ -1,6 +1,7 @@
 // Self-check for card display name localization and Japanese translation fallback.
 // Run: `node src/utils/langHelper.test.js`
 import assert from 'node:assert';
+import fs from 'node:fs';
 import { getCardDisplayName, translateJapaneseName } from './langHelper.js';
 
 // 1. When printed_name exists, it always wins regardless of language.
@@ -41,7 +42,14 @@ assert.strictEqual(translateJapaneseName('わるいリザードン'), 'Dark Char
 assert.strictEqual(translateJapaneseName('サカキのカイリキー'), "Giovanni's Machamp");
 
 // 7. Game-scoped language filtering in frontend.
-import { getLanguagesForGame, getLanguageNamesForGame, isLanguageSupported } from './languages.js';
+import { LANGUAGES, getLanguagesForGame, getLanguageNamesForGame, isLanguageSupported } from './languages.js';
+assert.deepStrictEqual(LANGUAGES, JSON.parse(fs.readFileSync(new URL('../../../shared/languages.json', import.meta.url), 'utf8')),
+  'frontend language mirror must match the backend shared table');
+assert.deepStrictEqual(getLanguagesForGame('riftbound').map(language => language.code), ['en']);
+assert.deepStrictEqual(getLanguageNamesForGame('riftbound'), ['English']);
+assert.ok(isLanguageSupported('riftbound', 'English'));
+assert.ok(isLanguageSupported('riftbound', 'en'));
+assert.ok(!isLanguageSupported('riftbound', 'Japanese'));
 assert.strictEqual(getLanguagesForGame('lorcana').length, 6);
 assert.ok(isLanguageSupported('lorcana', 'French'));
 assert.ok(isLanguageSupported('lorcana', 'fr'));

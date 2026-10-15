@@ -18,7 +18,7 @@ const TWO_FINISH_PRINTINGS = [{ value: 'Normal', label: 'Nonfoil' }, { value: 'H
 // the collection.printing CHECK constraint; only the label is game-specific.
 export function getPrintings(game) {
   const g = String(game || '').toLowerCase();
-  if (g === 'mtg' || g === 'lorcana') return TWO_FINISH_PRINTINGS;
+  if (g === 'mtg' || g === 'lorcana' || g === 'riftbound') return TWO_FINISH_PRINTINGS;
   return PRINTINGS.map(p => ({ value: p, label: p }));
 }
 

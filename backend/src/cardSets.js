@@ -193,6 +193,7 @@ function mtgSearchUrl(query, lang, extra = '') {
 // time and disk. Digital-only sets are skipped — no physical card to scan.
 async function listAllSets(game, lang) {
   const code = langOf(lang);
+  if (game === 'riftbound') return (await require('./riftboundApi').listSets(code)).map(s => s.id);
   if (game === 'mtg') {
     const sets = await getScryfallSets();
     return sets
@@ -379,7 +380,12 @@ async function fetchPokemonSet(set) {
 // it. Returns the fetched cards so a caller can count them.
 async function cacheSetCards(game, set, lang, { excludeChildCodes = [] } = {}) {
   const code = langOf(lang);
-  if (game !== 'mtg' && game !== 'pokemon' && game !== 'lorcana') throw new Error('only mtg/pokemon/lorcana');
+  if (game !== 'mtg' && game !== 'pokemon' && game !== 'lorcana' && game !== 'riftbound') throw new Error('only mtg/pokemon/lorcana/riftbound');
+  if (game === 'riftbound') {
+    const fetched = await require('./riftboundApi').getCardsBySet(set, code);
+    if (!fetched.length) throw absent(`no cards for set ${set} in ${languages.toName(code)}`);
+    return fetched.map(c => ({ name: c.name, set: c.set_id, number: c.number, img: c.image_url, raw: c }));
+  }
   if (game === 'lorcana') {
     const lorcastApi = require('./lorcastApi');
     const cleanSet = String(set || '').replace(/^lorcana-/, '');

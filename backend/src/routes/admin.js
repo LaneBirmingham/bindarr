@@ -288,7 +288,7 @@ router.delete('/users/:id', async (req, res) => {
 
 // --- Set-index build management ---
 
-const isGame = (g) => g === 'mtg' || g === 'pokemon' || g === 'lorcana';
+const { isGame } = require('../utils/games');
 
 // List persisted builds plus any in-flight/recent build progress.
 // --- Catalogs -------------------------------------------------------------

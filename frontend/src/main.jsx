@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import './apiBase.js' // installs native fetch shim before any request
 import './nativeInit.js' // Capacitor status-bar setup (no-op on web)
 import App from './App.jsx'
+import RiftboundNotice from './components/RiftboundNotice.jsx'
 import { I18nProvider } from './utils/i18n.jsx'
 import './index.css'
 
@@ -17,6 +18,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <I18nProvider>
       <App />
+      <RiftboundNotice />
     </I18nProvider>
   </React.StrictMode>,
 )

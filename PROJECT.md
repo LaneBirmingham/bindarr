@@ -5,7 +5,7 @@ features, see [README.md](README.md); this document explains **how the system is
 built and why**.
 
 Bindarr is a self-hosted trading-card collection manager for **Pokémon**,
-**Magic: The Gathering**, and **Disney Lorcana**. It identifies cards from a phone photo (no typing),
+**Magic: The Gathering**, and **Disney Lorcana**, and **Riftbound**. It identifies cards from a phone photo (no typing),
 tracks their real-world physical location (which binder page / box row slot),
 values the collection over time, and helps you pull and re-file the cards for a
 deck.
@@ -572,3 +572,31 @@ Setup and Docker deployment: see [README.md](README.md). Quick reference:
 - Frontend: `cd frontend && npm run dev` (Vite, port `5173`, proxies `/api` → `3001`).
 - Tests: `npm test` from the root (or `cd backend && npm test`) runs every unit suite in `backend/test/` plus the e2e suites under `backend/test/e2e/`. `npm run test:e2e` runs only the latter. No framework — each file is a plain `node` script.
 - Lint (matches CI): `cd frontend && npm run lint`.
+
+
+### Riftbound extension
+
+`riftboundApi.js` implements the existing normalized provider interface using
+`shared/riftbound/` only. `cardApi`, `cardSets`, search, collection/storage,
+decks and imports route through that interface. Startup seeds the bundled
+catalogue and sets into SQLite. No Riftbound price sweep runs; unavailable
+prices stay null, and stats distinguish unpriced copies from known totals.
+The shared game registry and English language support expose the same workflows
+in the UI. Public shares carry the same attribution and unavailable-price labels.
+
+`catalog.js` embeds local WebP bytes with Milo into the existing per-game scan
+catalogue. `cvScan` reads that catalogue through the same detection, dewarp,
+embedding and candidate-selection path used by the other games. Missing models
+or catalogues retain `503 notBuilt`; no alternate matcher guesses a card.
+
+The source has exact duplicate rows and reused source IDs. Offline ingest
+validates the source snapshot hash, row/image mapping, image SHA-256 and decoded
+dimensions before publishing. Identical records collapse; distinct variants
+retain deterministic IDs. The manifest maps every original row to its printing.
+Set plus full printing number (including variant/promo suffixes), supplemented
+by the source-record hash for collisions, identifies a printing; names do not.
+The snapshot preserves source timing/keyword derivations and provenance, with
+HTML entities decoded and adjacent bracket tokens separated for display.
+
+See [docs/riftbound.md](docs/riftbound.md) for reproducible checks and the explicit
+boundary between inventory deck flows and tournament rule enforcement.

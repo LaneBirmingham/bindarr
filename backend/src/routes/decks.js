@@ -7,7 +7,38 @@ const { validateDeckAddition } = require('../utils/deckRules');
 const scryfallApi = require('../scryfallApi');
 const { parseManaboxText } = require('../utils/csvMappers');
 
+const { isGame } = require('../utils/games');
 const router = express.Router();
+
+// Printing IDs survive an exact decklist round trip; ambiguous names never
+// choose an arbitrary art/foil variant from the local catalogue.
+async function riftboundDeckItems(text, userId) {
+  const api = require('../riftboundApi');
+  const items = new Map();
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const match = line.trim().match(/^(\d+)x?\s+(.+)$/i);
+    if (!match || Number(match[1]) < 1) throw Object.assign(new Error('Invalid Riftbound decklist line'), { status: 400 });
+    const quantity = Number(match[1]);
+    const token = match[2].trim();
+    const exact = token.match(/\[(riftbound-[^\]\s]+)\]$/) || token.match(/^(riftbound-\S+)$/);
+    let card;
+    if (exact) card = await api.getCardById(exact[1]);
+    else {
+      const { cards } = await api.searchCards({ name: token, limit: 5000 });
+      const matches = cards.filter(c => c.name.toLowerCase() === token.toLowerCase());
+      if (matches.length === 1) card = matches[0];
+    }
+    if (!card) throw Object.assign(new Error('Riftbound decklist needs an exact card ID for each ambiguous or unknown printing'), { status: 400 });
+    items.set(card.id, (items.get(card.id) || 0) + quantity);
+  }
+  for (const [cardId, quantity] of items) {
+    const owned = await db.get(`SELECT COALESCE(SUM(quantity), 0) owned FROM collection
+      WHERE card_id = ? AND user_id = ? AND list_type = 'collection'`, [cardId, userId]);
+    if (quantity > owned.owned) throw Object.assign(new Error(`You only own ${owned.owned} copies of ${cardId}.`), { status: 400 });
+  }
+  return items;
+}
 
 // Get User Decks
 router.get('/', async (req, res) => {
@@ -47,10 +78,10 @@ router.post('/', async (req, res) => {
     name, 
     description = '', 
     game = 'pokemon',
-    format = 'Standard',
+    format,
     category = 'Competitive',
     accent_color = '#eab308',
-    target_size = 60,
+    target_size,
     decklist_text = '',
     decklist_format = 'plain'
   } = req.body;
@@ -58,13 +89,17 @@ router.post('/', async (req, res) => {
   if (!name) {
     return res.status(400).json({ error: 'Deck name is required' });
   }
-  const deckGame = ['pokemon', 'mtg', 'lorcana'].includes(game) ? game : 'pokemon';
-  const targetSizeNum = parseInt(target_size, 10) || 60;
+  if (!isGame(game)) return res.status(400).json({ error: 'Invalid game' });
+  const deckGame = game;
+  const targetSizeNum = parseInt(target_size, 10) || (deckGame === 'riftbound' ? 40 : 60);
+  const deckFormat = format || (deckGame === 'riftbound' ? 'Casual' : 'Standard');
 
   try {
+    const riftboundItems = deckGame === 'riftbound' && typeof decklist_text === 'string' && decklist_text.trim()
+      ? await riftboundDeckItems(decklist_text, req.user.id) : null;
     const result = await db.run(
       `INSERT INTO decks (name, description, game, format, category, accent_color, target_size, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, description, deckGame, format, category, accent_color, targetSizeNum, req.user.id]
+      [name, description, deckGame, deckFormat, category, accent_color, targetSizeNum, req.user.id]
     );
     const newDeckId = result.lastID;
 
@@ -72,7 +107,11 @@ router.post('/', async (req, res) => {
     // collector number, so resolve those identifiers in batches instead of
     // guessing from a card name shared by many printings.
     if (decklist_text && typeof decklist_text === 'string') {
-      if (decklist_format === 'manabox' && deckGame === 'mtg') {
+      if (riftboundItems) {
+        for (const [cardId, quantity] of riftboundItems) {
+          await db.run('INSERT INTO deck_cards (deck_id, card_id, quantity) VALUES (?, ?, ?)', [newDeckId, cardId, quantity]);
+        }
+      } else if (decklist_format === 'manabox' && deckGame === 'mtg') {
         const items = parseManaboxText(decklist_text);
         const { cards, pairs } = await scryfallApi.bulkFetchByIdentifier(items.map(item => ({
           ...item,
@@ -111,7 +150,7 @@ router.post('/', async (req, res) => {
     res.status(201).json({ message: 'Deck created successfully', id: newDeckId });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to create deck' });
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Failed to create deck' });
   }
 });
 
@@ -137,7 +176,7 @@ router.get('/:id', async (req, res) => {
         cc.set_name,
         cc.number,
         cc.image_url,
-        cc.price_trend,
+        cc.price_trend, cc.game, cc.cmc, cc.color_identity,
         (SELECT COALESCE(SUM(quantity), 0) FROM collection WHERE card_id = cc.id AND user_id = ? AND list_type = 'collection') AS owned_qty,
         (SELECT COALESCE(SUM(dc2.quantity), 0)
          FROM deck_cards dc2 JOIN decks d2 ON dc2.deck_id = d2.id

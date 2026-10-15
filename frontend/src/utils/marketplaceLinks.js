@@ -70,7 +70,7 @@ export function cardmarketUrl(card) {
 // Null for a name with no Latin letters: searching TCGplayer for ヒトカゲ returns
 // zero results every time, and an action that cannot work is worse than none.
 export function searchUrl(card) {
-  if (!searchable(card)) return null;
+  if (cardGame(card) === 'riftbound' || !searchable(card)) return null;
   const g = cardGame(card);
   const line = g === 'mtg' ? 'magic' : (g === 'lorcana' ? 'lorcana-tcg' : 'pokemon');
   // Name only. Appending set name + number narrowed a lot of searches to zero
