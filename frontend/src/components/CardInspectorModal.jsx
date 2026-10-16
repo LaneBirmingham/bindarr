@@ -608,6 +608,11 @@ function CardInspectorModal({ card, onClose, onUpdate, onDeleted, showToast, onV
                   </div>
                   {/* Say where a non-English price came from and in what currency —
                       it is Cardmarket's EUR figure rendered with the app's $. */}
+                  {activeCard.price_status === 'unavailable' && activeCard.price_unavailable_reason && (
+                    <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: '0.1rem', lineHeight: 1.35 }}>
+                      {t('riftbound.noListing')}
+                    </div>
+                  )}
                   {priceSource(activeCard) && (
                     <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
                       {t('inspector.priceVia', { source: priceSource(activeCard).name, currency: priceSource(activeCard).currency })}

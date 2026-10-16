@@ -134,7 +134,7 @@ export default function PriceHistoryChart({
         <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginBottom: '6px', lineHeight: 1.35 }}>
           {coverage.marketCount > 0
             ? t('priceHistory.sourceCardmarket')
-            : t('priceHistory.sourceRecorded', { count: coverage.spanDays || 0 })}
+            : t('priceHistory.pointsRecorded', { count: coverage.recordedCount })}
           {coverage.marketCount > 0 && coverage.recordedCount > 0
             ? ` + ${t('priceHistory.plusRecorded', { count: coverage.recordedCount })}`
             : ''}

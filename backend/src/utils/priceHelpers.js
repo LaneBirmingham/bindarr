@@ -255,6 +255,7 @@ module.exports = {
   priceRefreshDays,
   DEFAULT_PRICE_REFRESH_DAYS,
   PRICE_SWEEP_INTERVAL_MS,
+  SWEEP_COLUMN,
   resolveCardPrice,
   priceMetadata,
   RIFTBOUND_NO_LISTING,

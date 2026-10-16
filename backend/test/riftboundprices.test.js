@@ -239,6 +239,79 @@ async function main() {
     const stamped = await db.get('SELECT riftbound_prices_swept_at AS at FROM app_settings WHERE id = 1');
     assert.ok(stamped.at, 'the sweep timestamp column exists and is written');
 
+    // --- 7. A delisted printing stops showing its old price -----------------
+    // The sweep used to `continue` past a printing with no quote, and the cache
+    // upsert COALESCEs, so a price that vanished from TCGplayer stayed on the card
+    // forever. It is cleared to NULL (never 0) — but only when the group returned
+    // usable quotes, so a bad response cannot blank a whole set.
+    const viId = 'riftbound-unl-229-219';
+    const withoutVi = PRICES_UNL.filter(p => p.productId !== 685521);
+    assert.strictEqual((await get(viId)).price_trend, 90.88, 'priced before the listing goes');
+    tcgcsv.getPrices = async () => withoutVi;
+    const delisted = await prices.priceSet({ set_id: 'riftbound-unl', n: 6 }, GROUPS);
+    assert.strictEqual(delisted.cleared, 1, 'exactly the delisted printing is cleared');
+    const gone = await get(viId);
+    for (const column of ['price_trend', 'price_normal', 'price_holofoil']) {
+      assert.strictEqual(gone[column], null, `${column} must be NULL after delisting, never 0`);
+    }
+    assert.strictEqual(gone.tcgplayer_product_id, 685521, 'the product is still known');
+    assert.strictEqual(resolveCardPrice({ ...gone, game: 'riftbound' }), null);
+    assert.strictEqual((await get('riftbound-unl-229*-219')).price_holofoil, 641.0, 'neighbours keep their prices');
+    // Repriced: back again.
+    tcgcsv.getPrices = pricesFor;
+    await prices.priceSet({ set_id: 'riftbound-unl', n: 6 }, GROUPS);
+    assert.strictEqual((await get(viId)).price_trend, 90.88);
+
+    // The guard: an empty price list clears nothing...
+    tcgcsv.getPrices = async () => [];
+    const empty = await prices.priceSet({ set_id: 'riftbound-unl', n: 6 }, GROUPS);
+    assert.strictEqual(empty.cleared, 0, 'an empty price list must not blank the set');
+    assert.strictEqual((await get(viId)).price_trend, 90.88);
+    // ...and neither does a list holding only a finish we do not map, which is
+    // also counted rather than silently dropped.
+    tcgcsv.getPrices = async () => [{ productId: 685521, marketPrice: 5, subTypeName: 'Reverse Foil' },
+      { productId: 685522, marketPrice: 6, subTypeName: 'Reverse Foil' }];
+    const odd = await prices.priceSet({ set_id: 'riftbound-unl', n: 6 }, GROUPS);
+    assert.strictEqual(odd.cleared, 0, 'a response with no usable quote must not blank the set');
+    assert.deepStrictEqual(odd.unmappedFinishes, { 'Reverse Foil': 2 }, 'unmapped finishes are counted');
+    assert.strictEqual((await get(viId)).price_trend, 90.88);
+    tcgcsv.getPrices = pricesFor;
+
+    // --- 8. The sweep: one failing set, unmatched sets, a total outage -------
+    await db.run(row('riftbound-zzz-001-1', 'No Group', 'zzz', '001'));
+    tcgcsv.getGroups = async () => GROUPS;
+    const unmappedBefore = console.warn;
+    const warnings = [];
+    console.warn = (...a) => warnings.push(a.join(' '));
+    try {
+      await db.run(`UPDATE app_settings SET riftbound_prices_swept_at = NULL WHERE id = 1`);
+      await db.run(`UPDATE card_cache SET price_trend = NULL, price_normal = NULL, price_holofoil = NULL
+        WHERE id = 'riftbound-opp-269-298'`);
+      tcgcsv.getProducts = async (categoryId, groupId) => {
+        if (groupId === 24560) throw new Error('boom');
+        return groupId === 24528 ? PRODUCTS_OPP : [];
+      };
+      const partial = await prices.updateCollectionPrices(true);
+      assert.strictEqual(partial.failed.length, 1, 'the failing set is in the summary');
+      assert.strictEqual(partial.failed[0].set, 'riftbound-unl');
+      assert.match(partial.failed[0].error, /boom/);
+      assert.strictEqual((await get('riftbound-opp-269-298')).price_holofoil, 12.89,
+        'a set after the failing one is still priced');
+      assert.ok(partial.unmatched.includes('riftbound-zzz'), 'sets with no TCGplayer group are in the summary');
+      assert.ok(warnings.some(w => w.includes('riftbound-zzz')), 'and warned about, not just logged');
+      assert.strictEqual(await shouldSweepPrices('riftbound'), false, 'a partial failure still counts as a sweep');
+
+      // Total outage: every set throws. The gate must stay open for the next tick.
+      await db.run(`UPDATE app_settings SET riftbound_prices_swept_at = NULL WHERE id = 1`);
+      tcgcsv.getProducts = async () => { throw new Error('mirror down'); };
+      const outage = await prices.updateCollectionPrices(true);
+      assert.ok(outage.results.every(r => !r.matched), 'nothing was fetched successfully');
+      assert.ok(outage.failed.length >= 2, 'every failing set is reported');
+      assert.strictEqual(await shouldSweepPrices('riftbound'), true, 'a total outage must leave the sweep gate open');
+    } finally {
+      console.warn = unmappedBefore;
+    }
+
     console.log('riftboundprices.test.js: variant keys, duplicate resolution, Foil mapping, '
       + 'unlisted-stays-null, re-cache preservation and the sweep gate all passed');
   } finally {

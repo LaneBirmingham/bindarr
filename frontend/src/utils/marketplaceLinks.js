@@ -129,6 +129,12 @@ export function priceSource(card) {
 // words, because they call for different actions from the reader.
 export function noLinkReason(card) {
   if (tcgplayerUrl(card) || cardmarketUrl(card)) return null;
+  // Riftbound sets map one-to-one onto TCGplayer groups, so a missing link is never
+  // an unmatched set — it is a printing TCGplayer has no product for (or one the
+  // sweep has not reached yet).
+  if (cardGame(card) === 'riftbound') {
+    return "No TCGplayer product is matched to this printing (by set and collector number).";
+  }
   if (isForeignPokemon(card)) {
     return 'No marketplace product found for this printing — TCGplayer does not list it and TCGdex has no Cardmarket entry, which is also why there is no price.';
   }

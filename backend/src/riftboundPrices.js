@@ -109,7 +109,9 @@ function pickProduct(candidates, cardName) {
 const quoteOf = (row) => (row.marketPrice > 0 ? row.marketPrice : (row.midPrice > 0 ? row.midPrice : null));
 
 // One group: its products and prices joined to our cached rows by printing number.
-// Returns counts rather than throwing — one set failing must not abandon the rest.
+// Returns counts rather than throwing for an unmatched set. A set whose fetch FAILS does
+// throw from here; updateCollectionPrices catches it per set so one failure cannot
+// abandon the rest.
 async function priceSet(set, groups) {
   const code = String(set.set_id).replace(/^riftbound-/, '').toUpperCase();
   const group = groups.find(g => String(g.abbreviation || '').toUpperCase() === code);
@@ -121,9 +123,14 @@ async function priceSet(set, groups) {
   ]);
 
   const quotes = new Map();
+  const unmappedFinishes = {};
   for (const row of prices) {
     const column = FINISH_COLUMN[row.subTypeName];
-    if (!column) continue;                       // an unmapped finish is not a price
+    if (!column) {                               // an unmapped finish is not a price...
+      const name = String(row.subTypeName);      // ...but it is worth counting
+      unmappedFinishes[name] = (unmappedFinishes[name] || 0) + 1;
+      continue;
+    }
     const amount = quoteOf(row);
     if (amount == null) continue;
     const current = quotes.get(row.productId) || {};
@@ -146,7 +153,7 @@ async function priceSet(set, groups) {
     [GAME, set.set_id]
   );
 
-  let priced = 0;
+  let priced = 0, cleared = 0;
   const unlisted = [];
   for (const row of rows) {
     const product = pickProduct(byNumber.get(numberKey(row.number)), row.name);
@@ -160,7 +167,22 @@ async function priceSet(set, groups) {
     );
     const quote = quotes.get(product.productId);
     const trend = quote ? (quote.price_normal ?? quote.price_holofoil ?? null) : null;
-    if (!(trend > 0)) { unlisted.push(row.number); continue; }
+    if (!(trend > 0)) {
+      unlisted.push(row.number);
+      // A printing that WAS priced and no longer is must not keep showing the old
+      // number: null, never 0. Only when this group returned usable quotes at all —
+      // an empty or unusable TCGCSV response says nothing about any card, and must
+      // not be able to blank a whole set.
+      if (quotes.size > 0) {
+        const res = await db.run(
+          `UPDATE card_cache SET price_trend = NULL, price_normal = NULL, price_holofoil = NULL
+            WHERE id = ? AND (price_trend IS NOT NULL OR price_normal IS NOT NULL OR price_holofoil IS NOT NULL)`,
+          [row.id]
+        );
+        if (res && res.changes > 0) cleared++;
+      }
+      continue;
+    }
     await db.run(
       `UPDATE card_cache
           SET price_trend = ?, price_normal = ?, price_holofoil = ?,
@@ -173,7 +195,7 @@ async function priceSet(set, groups) {
     await recordPrice(row.id, trend);
     priced++;
   }
-  return { set: set.set_id, group: group.name, matched: true, priced, cached: rows.length, unlisted };
+  return { set: set.set_id, group: group.name, matched: true, priced, cleared, cached: rows.length, unlisted, unmappedFinishes };
 }
 
 // Every Riftbound set in the cache, largest first.
@@ -198,18 +220,37 @@ async function updateCollectionPrices(force = false) {
     if (!sets.length) return { sets: 0, priced: 0 };
 
     const results = [];
-    for (const set of sets) results.push(await priceSet(set, groups));
+    const failed = [];
+    for (const set of sets) {
+      try {
+        results.push(await priceSet(set, groups));
+      } catch (err) {
+        failed.push({ set: set.set_id, error: err.message });
+        console.error(`TCGCSV Riftbound: ${set.set_id} failed: ${err.message}`);
+      }
+    }
 
     const priced = results.reduce((n, r) => n + (r.priced || 0), 0);
     const cached = results.reduce((n, r) => n + (r.cached || 0), 0);
     const unlisted = results.reduce((n, r) => n + (r.unlisted || []).length, 0);
     const unmatched = results.filter(r => !r.matched).map(r => r.set);
-    if (unmatched.length) {
-      console.log(`TCGCSV Riftbound: no TCGplayer group for ${unmatched.length} set(s): ${unmatched.join(', ')}`);
+    const cleared = results.reduce((n, r) => n + (r.cleared || 0), 0);
+    const unmappedFinishes = {};
+    for (const r of results) {
+      for (const [name, n] of Object.entries(r.unmappedFinishes || {})) unmappedFinishes[name] = (unmappedFinishes[name] || 0) + n;
     }
-    console.log(`TCGCSV Riftbound: priced ${priced}/${cached} printing(s) across ${results.length} set(s); ${unlisted} without a listing`);
-    await markPricesSwept(GAME);
-    return { sets: results.length, cached, priced, unlisted, unmatched, results };
+    if (unmatched.length) {
+      console.warn(`TCGCSV Riftbound: no TCGplayer group for ${unmatched.length} set(s): ${unmatched.join(', ')}`);
+    }
+    if (Object.keys(unmappedFinishes).length) {
+      console.warn(`TCGCSV Riftbound: ignored price rows with unmapped finish(es): ${Object.entries(unmappedFinishes).map(([k, v]) => `${k} x${v}`).join(', ')}`);
+    }
+    console.log(`TCGCSV Riftbound: priced ${priced}/${cached} printing(s) across ${results.length} set(s); ${unlisted} without a listing; ${cleared} stale price(s) cleared; ${failed.length} set(s) failed`);
+    // Leave the gate open when EVERY set failed (an outage): the next hourly tick
+    // must retry. A partial failure still counts as a sweep, so the sets that
+    // succeeded are not re-fetched hourly until the failed one recovers.
+    if (!(failed.length && !results.some(r => r.matched))) await markPricesSwept(GAME);
+    return { sets: results.length, cached, priced, cleared, unlisted, unmatched, unmappedFinishes, failed, results };
   } catch (err) {
     console.error('Error during Riftbound price update:', err.message);
     return { error: err.message };
