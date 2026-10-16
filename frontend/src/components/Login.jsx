@@ -153,11 +153,11 @@ function Login({ onLoginSuccess }) {
       }}>
         {/* Logo/Icon */}
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <div style={{ width: '84px', height: '84px', margin: '0 auto 1rem auto', filter: 'drop-shadow(0 0 12px var(--accent-red-glow))' }}>
+          <div style={{ width: '84px', height: '84px', margin: '0 auto 1rem auto', filter: 'drop-shadow(0 0 12px var(--brand-glow))' }}>
             <Logo />
           </div>
           <h2 style={{ fontSize: '1.8rem', color: 'var(--text-strong)', fontWeight: 800 }}>
-            Bind<span style={{ color: 'var(--accent-red)' }}>arr</span>
+            Bind<span style={{ color: 'var(--brand)' }}>arr</span>
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
             {t(setupRequired ? 'login.setupTagline' : isRegister ? 'login.taglineRegister' : 'login.taglineLogin')}

@@ -57,6 +57,9 @@
   /* Shadows and Transitions */
   --shadow-glow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   --shadow-accent: 0 0 15px var(--accent-red-glow);
+  /* The wordmark's accent. Red everywhere except Ledger, where red means a loss. */
+  --brand: var(--accent-red);
+  --brand-glow: var(--accent-red-glow);
   --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   --radius-sm: 8px;
   --radius-md: 16px;
@@ -100,6 +103,139 @@
     radial-gradient(at 100% 100%, rgba(239, 68, 68, 0.07) 0px, transparent 50%),
     radial-gradient(at 50% 50%, #ffffff 0px, var(--bg-primary) 100%);
 }
+
+/* Ledger — the default. Flat true-black surfaces, hairline borders, teal as the one
+   accent and green/red reserved for gain/loss, after Collectr's portfolio screens.
+   Prices stay amber through --accent-yellow (many call sites set it inline); only the
+   card tile price is moved to the strongest foreground. Primary actions are teal,
+   not --accent-red, because red here means a loss. */
+:root[data-theme="ledger"] {
+  --font-main: 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+
+  --bg-primary: #000000;
+  --bg-secondary: #0d0e10;
+  --bg-glass: #0d0e10;
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --border-glass-hover: rgba(255, 255, 255, 0.14);
+
+  --text-primary: #f4f6f7;
+  --text-secondary: #adb2b9;
+  --text-muted: #6e747c;
+  --text-strong: #ffffff;
+  --text-on-accent: #04100f;
+
+  --accent-red: #f0564e;
+  --accent-red-glow: rgba(240, 86, 78, 0.35);
+  --accent-blue: #41aaa1;
+  --accent-blue-glow: rgba(65, 170, 161, 0.35);
+  --accent-yellow: #e3c05a;
+  --accent-yellow-glow: rgba(227, 192, 90, 0.35);
+
+  --ledger-teal: #41aaa1;
+  --ledger-teal-bright: #5fd3c7;
+  --ledger-gain: #21ce99;
+
+  --brand: var(--ledger-teal-bright);
+  --brand-glow: rgba(65, 170, 161, 0.35);
+
+  --type-grass: #21ce99;
+
+  --logo-cover: #41aaa1;
+  --logo-spine: #1e5b57;
+  --logo-page-left: #bfeee9;
+  --logo-page-right: #ffffff;
+  --logo-ring-stroke: #000000;
+  --logo-ring-inner: #ffffff;
+
+  --surface-1: rgba(255, 255, 255, 0.03);
+  --surface-2: rgba(255, 255, 255, 0.06);
+  --surface-3: rgba(255, 255, 255, 0.09);
+  --input-bg: #131417;
+  --input-bg-focus: #1a1b1f;
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+
+  --shadow-glow: none;
+  --shadow-accent: none;
+  --bg-gradient: linear-gradient(var(--bg-primary), var(--bg-primary));
+}
+
+:root[data-theme="ledger"] .glass-panel {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--bg-secondary);
+}
+
+:root[data-theme="ledger"] .logo-icon svg,
+:root[data-theme="ledger"] .logo-icon img {
+  filter: none;
+}
+
+:root[data-theme="ledger"] .logo-text {
+  background: none;
+  -webkit-text-fill-color: var(--text-strong);
+  color: var(--text-strong);
+}
+
+:root[data-theme="ledger"] .logo-text span {
+  color: var(--ledger-teal-bright);
+  -webkit-text-fill-color: var(--ledger-teal-bright);
+}
+
+:root[data-theme="ledger"] .btn {
+  border-radius: 999px;
+}
+
+:root[data-theme="ledger"] .btn-primary {
+  background: var(--ledger-teal);
+  border: 1px solid var(--ledger-teal);
+  box-shadow: none;
+  color: var(--text-on-accent);
+  font-weight: 700;
+}
+
+:root[data-theme="ledger"] .btn-primary:hover {
+  transform: none;
+  background: var(--ledger-teal-bright);
+  border-color: var(--ledger-teal-bright);
+  box-shadow: none;
+}
+
+:root[data-theme="ledger"] .btn-secondary:hover {
+  transform: none;
+}
+
+:root[data-theme="ledger"] .nav-tab.active,
+:root[data-theme="ledger"] .sub-nav-tab.active {
+  color: var(--ledger-teal-bright);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: 3px solid var(--ledger-teal);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+:root[data-theme="ledger"] .metric-card:hover,
+:root[data-theme="ledger"] .glass-panel:hover {
+  transform: none;
+}
+
+:root[data-theme="ledger"] .tcg-card-price {
+  color: var(--text-strong);
+}
+
+:root[data-theme="ledger"] select:focus,
+:root[data-theme="ledger"] .select-control:focus,
+:root[data-theme="ledger"] .input-control:focus {
+  border-color: var(--ledger-teal);
+  box-shadow: 0 0 0 3px rgba(65, 170, 161, 0.25);
+  outline: none;
+}
+
+:root[data-theme="ledger"] ::-webkit-scrollbar-thumb { background: #1a1b1f; border-color: #000000; }
+:root[data-theme="ledger"] ::-webkit-scrollbar-thumb:hover { background: #6e747c; }
 
 /* Pokémon (Pokédex) — classic red handheld vibe with electric yellow and cyan sensor accents */
 :root[data-theme="pokemon"] {

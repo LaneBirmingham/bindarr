@@ -70,7 +70,7 @@ function Settings({ user, onUpdateUser, showToast }) {
 
   const [publicBaseUrl, setPublicBaseUrl] = useState('');
 
-  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'ledger');
   const [currency, setCurrencyState] = useState(() => getCurrency());
   const [defaultGameValue, setDefaultGameValue] = useState(() => defaultGame());
   const [shownGames, setShownGames] = useState(() => enabledGames());
@@ -438,9 +438,9 @@ function Settings({ user, onUpdateUser, showToast }) {
   };
 
   const origin = publicBaseUrl || `${window.location.protocol}//${window.location.host}`;
-  const activeTheme = theme || localStorage.getItem('theme') || 'dark';
-  const themeQuery = activeTheme !== 'dark' ? `&theme=${encodeURIComponent(activeTheme)}` : '';
-  const shareUrl = `${origin}/share/${user?.share_token}${activeTheme !== 'dark' ? `?theme=${encodeURIComponent(activeTheme)}` : ''}`;
+  const activeTheme = theme || localStorage.getItem('theme') || 'ledger';
+  const themeQuery = activeTheme !== 'ledger' ? `&theme=${encodeURIComponent(activeTheme)}` : '';
+  const shareUrl = `${origin}/share/${user?.share_token}${activeTheme !== 'ledger' ? `?theme=${encodeURIComponent(activeTheme)}` : ''}`;
   const tradeUrl = `${origin}/share/${user?.share_token}?list=trade${themeQuery}`;
   const wishlistUrl = `${origin}/share/${user?.share_token}?list=wishlist${themeQuery}`;
 
@@ -949,6 +949,7 @@ function Settings({ user, onUpdateUser, showToast }) {
                 showToast(t('prefs.themeSet', { theme: t(`theme.${val}`) }));
               }}
             >
+              <option value="ledger">{t('theme.ledger')}</option>
               <option value="dark">{t('theme.dark')}</option>
               <option value="light">{t('theme.light')}</option>
               <option value="pokemon">{t('theme.pokemon')}</option>

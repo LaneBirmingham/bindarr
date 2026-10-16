@@ -1132,6 +1132,7 @@
   "prefs.currency": "Currency",
   "prefs.currencyHint": "Changes the currency displayed for all prices across the app.",
   "prefs.currencySet": "Currency set to {currency}.",
+  "theme.ledger": "Ledger",
   "theme.dark": "Dark",
   "theme.light": "Light",
   "theme.pokemon": "Pokémon",
