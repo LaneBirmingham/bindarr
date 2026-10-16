@@ -6,7 +6,11 @@ const crypto = require('crypto');
 const sharp = require('sharp');
 
 const DEFAULT_TARGET = path.resolve(__dirname, '../../shared/riftbound');
-const PRICE_UNAVAILABLE = 'No exact-printing price source with an approved licence has been verified.';
+// The snapshot carries no prices by design — it is an immutable catalogue of printing
+// identities. Prices are TCGplayer's, fetched by the TCGCSV sweep (src/riftboundPrices.js)
+// into card_cache once the printings are cached, so this string describes the snapshot
+// rather than the game.
+const PRICE_UNAVAILABLE = 'This snapshot carries printing identities only; prices come from the TCGCSV sweep once printings are cached.';
 const NOTICE = 'Bindarr was created under Riot Games\' "Legal Jibber Jabber" policy using assets owned by Riot Games. Riot Games does not endorse or sponsor this project.';
 const sha256 = value => crypto.createHash('sha256').update(value).digest('hex');
 function canonicalJson(value) {

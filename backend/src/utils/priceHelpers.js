@@ -14,11 +14,19 @@ function isRiftboundCard(card) {
   return !!card && (card.game === 'riftbound' || String(card.card_id || card.id || '').startsWith('riftbound-'));
 }
 
+// Riftbound prices are TCGplayer market prices via TCGCSV category 89, matched to
+// the exact printing (set + collector number, variant suffix included). A printing
+// TCGplayer has no listing for stays unavailable — and still says why, because
+// "no listing" on a real card is something the owner can act on, and a plausible
+// number invented to fill the gap is not.
+const RIFTBOUND_NO_LISTING = 'No TCGplayer listing matched this printing.';
+
 function priceMetadata(card) {
   if (!isRiftboundCard(card)) return {};
-  return card.market_value > 0
-    ? { price_status: 'manual' }
-    : { price_status: 'unavailable', price_unavailable_reason: 'no-approved-exact-printing-source' };
+  if (card.market_value > 0) return { price_status: 'manual' };
+  return card.price_trend > 0
+    ? { price_status: 'available' }
+    : { price_status: 'unavailable', price_unavailable_reason: RIFTBOUND_NO_LISTING };
 }
 
 // Unknown Riftbound prices remain null, including rows with stale/foreign
@@ -31,7 +39,16 @@ function resolveCardPrice(card) {
   // price, and the raw price is all the card APIs quote. Only rows selected with
   // collection.market_value carry it, so a bare card_cache row is unaffected.
   if (card.market_value > 0) return card.market_value;
-  if (isRiftboundCard(card)) return null;
+  // Riftbound is one price per printing with no finish fallback chain, so the
+  // `|| 0` on the last line must not apply to it. An unlisted printing has to
+  // stay null: valuationMetadata counts a null as unpriced, and returning 0 there
+  // would present an unknown as a quote of nothing. A copy the owner marked as
+  // the foil finish reads that column, which is the same choice the Pokémon path
+  // makes for 'Holofoil'.
+  if (isRiftboundCard(card)) {
+    if (card.printing === 'Foil' && card.price_holofoil > 0) return card.price_holofoil;
+    return card.price_trend > 0 ? card.price_trend : null;
+  }
   if (card.printing === 'Holofoil' && card.price_holofoil !== null && card.price_holofoil > 0) {
     return card.price_holofoil;
   }
@@ -162,6 +179,11 @@ const SWEEP_COLUMN = {
   // install. It was invisible because the daily interval passed force: true and
   // skipped the gate, which is exactly why that argument is gone now.
   lorcana: 'lorcana_prices_swept_at',
+  // Riftbound prices come from TCGCSV category 89 — TCGplayer's own Riftbound
+  // catalogue — matched per printing. Its own clock: different game, different
+  // cache rows, different group list and a different set of traps (see
+  // riftboundPrices.js).
+  riftbound: 'riftbound_prices_swept_at',
 };
 
 // How often the automatic sweep is allowed to run, as configured. 0 turns it off.
@@ -235,6 +257,7 @@ module.exports = {
   PRICE_SWEEP_INTERVAL_MS,
   resolveCardPrice,
   priceMetadata,
+  RIFTBOUND_NO_LISTING,
   valuationMetadata,
   isRiftboundCard,
   parseCardRow,

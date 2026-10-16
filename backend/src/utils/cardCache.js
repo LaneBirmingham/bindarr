@@ -22,13 +22,34 @@ const CHUNK = 50;
 
 const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
 
+// Columns a price SWEEP owns rather than a provider.
+//
+// Providers describe a card; the sweeps describe what it is worth, and they write
+// straight to card_cache rather than through here. So an incoming row that carries
+// no price is not saying "this card is worthless" — it is saying nothing at all,
+// and overwriting with that silence is how Riftbound prices would have been erased:
+// riftboundApi.cacheAllCards() re-caches every printed card on boot and searchCards
+// re-caches on every search, each pass stamping every price column with null. The
+// upsert would then blank what the last sweep wrote, daily, with no error anywhere.
+//
+// COALESCE keeps the non-null side, so a provider that genuinely has a price still
+// wins and a provider that has none cannot destroy one.
+const PRICE_OWNED_BY_A_SWEEP = new Set([
+  'price_trend', 'price_normal', 'price_holofoil', 'price_reverse_holofoil',
+  'price_avg1', 'price_avg7', 'price_avg30',
+  'price_currency', 'price_source', 'tcgplayer_product_id',
+  'tcgplayer_url', 'cardmarket_url',
+]);
+
 // Upsert, not INSERT OR REPLACE. REPLACE deletes the row and inserts a new one, so
 // every column this list does NOT name is silently reset to its default — which
 // already cost price_1st_edition (written by tcgcsvApi, never by a provider) on every
 // re-cache, and would cost the English name learned below the same way.
 const SET_CLAUSE = COLUMNS
   .filter(c => c !== 'id' && c !== 'name')
-  .map(c => `${c} = excluded.${c}`)
+  .map(c => PRICE_OWNED_BY_A_SWEEP.has(c)
+    ? `${c} = COALESCE(excluded.${c}, card_cache.${c})`
+    : `${c} = excluded.${c}`)
   .join(', ');
 
 // `name` is the one column an incoming row can be WORSE at. A non-English TCGdex

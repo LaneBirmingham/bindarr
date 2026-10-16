@@ -35,12 +35,17 @@ engine. Decks support owned-card lists, exact-printing text export/import,
 checkout locations and return. Exact deck list lines carry `[riftbound-…]` IDs;
 ambiguous name-only imports need an explicit printing.
 
-Provider prices are **unavailable**, never estimated, name-matched or fabricated.
-Owner-entered copy values remain explicit user data. Unpriced copies count toward
+Provider prices are **TCGplayer market prices via TCGCSV** (category 89), matched to
+the exact printing — set plus collector number, variant suffix included — so an
+Overnumbered, Signature or alternate-art printing is priced off its own product and
+never off the base print. Measured coverage of the bundled catalogue: 1,349 of 1,356
+printings (99.5%); the five without a listing are PR promos TCGplayer does not carry.
+A printing with no listing has a **null** price, never a zero and never a name-matched
+approximation, and no price-history point is written for it. Owner-entered copy values
+remain explicit user data and win over any provider price. Unpriced copies count toward
 inventory and coverage, while all-unpriced valuation/ROI remain null; mixed totals
 are labelled partial. JSON exports preserve status; internal CSV exports include
-Game and Price Status with blank unknown Market Price. Neither a zero price nor
-a price-history point is created for an unavailable quote.
+Game and Price Status with blank unknown Market Price.
 
 Riftbound decks are casual inventory lists. Full tournament legality, separate
 competitive deck zones, deck codes and digital gameplay are deliberately outside

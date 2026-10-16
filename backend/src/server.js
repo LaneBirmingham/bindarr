@@ -346,6 +346,10 @@ db.initDb()
       // prices in USD, and 97% coverage against TCGdex's 8% — so it should have
       // the final say on any card it can place.
       require('./tcgcsvApi').updateCollectionPrices();
+      // Riftbound is a separate catalogue to everything above: TCGCSV category 89,
+      // its own group list and its own sweep gate. It shares nothing with the Pokémon
+      // sweep but the mirror it reads from.
+      require('./riftboundPrices').updateCollectionPrices();
     }, 1000 * 60 * 60);
 
     // Shortly after startup, catch up if the last sweep was over a day ago.
@@ -359,6 +363,7 @@ db.initDb()
       require('./tcgdexApi').updateCollectionPrices();
       require('./pokemontcgapi').updateCollectionPrices();
       require('./tcgcsvApi').updateCollectionPrices();
+      require('./riftboundPrices').updateCollectionPrices();
     }, 30000);
 
     // Periodically purge expired sessions so the table doesn't grow unbounded

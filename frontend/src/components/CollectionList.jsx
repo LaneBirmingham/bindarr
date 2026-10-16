@@ -624,7 +624,7 @@ function CollectionList({ statsTrigger, onUpdate, showToast, selectedCardFilter,
       {!loading && !selectMode && (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', fontSize: '0.78rem', color: 'var(--text-secondary)', flexWrap: 'wrap', gap: '0.5rem' }}>
           <span><strong style={{ color: 'var(--text-strong)' }}>{displayCards.length}</strong> {t('collection.cardUnit', { count: displayCards.length })}</span>
-          <span>{t('collection.totalValue')} <strong style={{ color: 'var(--accent-yellow)' }}>{displayCards.some(c => c.game === 'riftbound' && !(c.market_value > 0)) ? (displayCards.every(c => c.game === 'riftbound' && !(c.market_value > 0)) ? t('riftbound.priceUnavailable') : `${priceText(totalValue)} · ${t('riftbound.partialValuation')}`) : priceText(totalValue)}</strong></span>
+          <span>{t('collection.totalValue')} <strong style={{ color: 'var(--accent-yellow)' }}>{displayCards.some(c => c.game === 'riftbound' && !(c.market_value > 0) && !(c.price_trend > 0)) ? (displayCards.every(c => c.game === 'riftbound' && !(c.market_value > 0) && !(c.price_trend > 0)) ? t('riftbound.priceUnavailable') : `${priceText(totalValue)} · ${t('riftbound.partialValuation')}`) : priceText(totalValue)}</strong></span>
         </div>
       )}
 

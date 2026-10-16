@@ -249,9 +249,21 @@ async function main() {
     assert.strictEqual(cacheCount.count, 1356);
     const cacheSets = await db.all("SELECT id FROM sets WHERE game = 'riftbound'");
     assert.deepStrictEqual(cacheSets.map(set => set.id).sort(), expectedSetIds);
-    assert.strictEqual((await api.updateCollectionPrices()).price_status, 'unavailable');
+    // The price sweep is deliberately NOT part of this offline contract. It is the one
+    // operation in the Riftbound path that is supposed to reach out — to TCGCSV, which
+    // mirrors TCGplayer's Riftbound catalogue — so it is pinned against fixtures in
+    // riftboundprices.test.js instead. What this file proves is that the catalogue
+    // itself still needs no network at all, and that a price can only ever arrive from
+    // the cache rather than from the snapshot.
     assert.strictEqual((await db.get('SELECT COUNT(*) AS count FROM price_history')).count, 0);
-    assert.strictEqual(resolveCardPrice({ game: 'riftbound', price_trend: 99, price_normal: 90 }), null);
+    // A cached price is what the row resolves to, and both finishes read from it.
+    assert.strictEqual(resolveCardPrice({ game: 'riftbound', price_trend: 99, price_normal: 90 }), 99);
+    assert.strictEqual(resolveCardPrice({ game: 'riftbound', printing: 'Foil', price_holofoil: 40, price_trend: 12 }), 40);
+    // An unlisted printing stays null. `price_trend || 0` would have made an unknown
+    // price read as a quote of nothing, and valuationMetadata would count it as priced.
+    assert.strictEqual(resolveCardPrice({ game: 'riftbound', price_trend: null, price_normal: 90 }), null);
+    assert.strictEqual(resolveCardPrice({ game: 'riftbound', price_trend: 0 }), null);
+    // A per-copy value the owner set still wins over any provider price.
     assert.strictEqual(resolveCardPrice({ game: 'riftbound', market_value: 12.5, price_trend: 99 }), 12.5);
     assert.deepStrictEqual(valuationMetadata([{ game: 'riftbound', quantity: 2 }]), {
       unpricedCards: 2, valuationAvailable: false, partialValuation: false, price_status: 'unavailable',

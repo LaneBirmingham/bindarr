@@ -6,11 +6,17 @@ const crypto = require('crypto');
 const db = require('./db');
 const { cacheNormalizedCards } = require('./utils/cardCache');
 const { parseSetList } = require('./utils/setQuery');
+const { priceMetadata, RIFTBOUND_NO_LISTING } = require('./utils/priceHelpers');
 const languages = require('./utils/languages');
 
 const DATA_DIR = path.resolve(__dirname, '../../shared/riftbound');
 const ART_DIR = path.join(DATA_DIR, 'art');
-const PRICE_UNAVAILABLE = 'No exact-printing price source with an approved licence has been verified.';
+// Why a Riftbound card can still show no price. The snapshot itself carries none —
+// prices live in card_cache and are written by the TCGCSV sweep (riftboundPrices.js),
+// which is what makes this string about an individual printing rather than about the
+// whole game. Kept under the old name because it is the reason string callers and
+// exports already use.
+const PRICE_UNAVAILABLE = RIFTBOUND_NO_LISTING;
 const NOTICE = 'Bindarr was created under Riot Games\' "Legal Jibber Jabber" policy using assets owned by Riot Games. Riot Games does not endorse or sponsor this project.';
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 let snapshotCache;
@@ -63,7 +69,12 @@ function normalizeCard(raw, printing) {
     if (!found) throw new Error('A verified Riftbound printing is required');
     printing = found.printing;
   }
-  return {
+  // Prices are NOT part of this snapshot and cannot be set from it: the card_cache
+  // row is the only place a price lives, and it is written by the TCGCSV sweep. The
+  // status below is therefore the honest "no cached price yet" answer, and every read
+  // path that returns a card re-reads the price columns behind it (see
+  // attachCachedPrices).
+  const card = {
     id: printing.id,
     name: decodeText(raw.name),
     supertype: raw.type,
@@ -77,7 +88,6 @@ function normalizeCard(raw, printing) {
     price_trend: null, price_normal: null, price_holofoil: null,
     price_reverse_holofoil: null, price_avg1: null, price_avg7: null, price_avg30: null,
     price_1st_edition: null, price_currency: null, price_source: null,
-    price_status: 'unavailable', price_unavailable_reason: PRICE_UNAVAILABLE,
     cmc: raw.energy, color_identity: [...(raw.domains || [])],
     game: 'riftbound', language: 'English', printed_name: null,
     tcgplayer_url: null, cardmarket_url: null, tcgplayer_product_id: null,
@@ -92,6 +102,7 @@ function normalizeCard(raw, printing) {
     source_record_sha256: printing.source_record_sha256, source_rows: [...printing.source_rows],
     image_sha256: printing.image_sha256, attribution: NOTICE,
   };
+  return { ...card, ...priceMetadata(card) };
 }
 function allCards() { return [...loadSnapshot().entries.values()].map(({ raw, printing }) => normalizeCard(raw, printing)); }
 async function cacheCards(cards) {
@@ -101,6 +112,41 @@ async function cacheCards(cards) {
   const verified = (cards || []).map(c => entries.get(c?.id)).filter(Boolean)
     .map(({ raw, printing }) => normalizeCard(raw, printing));
   await cacheNormalizedCards(verified, 'riftbound');
+}
+
+// Put the cached prices back on cards coming out of the snapshot, and recompute the
+// price status from them.
+//
+// The snapshot has no prices, so a card read straight out of it always looks
+// unpriced — which was correct when nothing priced Riftbound and is wrong now that
+// TCGCSV does. Reading them here keeps one writer (the sweep) and one reader (the
+// cache) instead of a second copy of prices living in the bundle.
+async function attachCachedPrices(cards) {
+  const list = (cards || []).filter(c => c && c.id);
+  if (!list.length) return cards;
+  const byId = new Map();
+  const CHUNK = 400;   // stays well inside SQLite's bound-parameter limit
+  for (let i = 0; i < list.length; i += CHUNK) {
+    const ids = list.slice(i, i + CHUNK).map(c => c.id);
+    const rows = await db.all(
+      `SELECT id, price_trend, price_normal, price_holofoil, price_currency, price_source, tcgplayer_url, tcgplayer_product_id
+         FROM card_cache WHERE id IN (${ids.map(() => '?').join(', ')})`,
+      ids
+    );
+    for (const row of rows) byId.set(row.id, row);
+  }
+  return list.map(card => {
+    const row = byId.get(card.id);
+    if (!row) return card;
+    const priced = {
+      ...card,
+      price_trend: row.price_trend, price_normal: row.price_normal,
+      price_holofoil: row.price_holofoil, price_currency: row.price_currency,
+      price_source: row.price_source, tcgplayer_url: row.tcgplayer_url,
+      tcgplayer_product_id: row.tcgplayer_product_id,
+    };
+    return { ...priced, ...priceMetadata(priced) };
+  });
 }
 function cleanNumber(number) {
   return String(number || '').trim().replace(/^#/, '').split('/')[0].trim().toLowerCase();
@@ -142,20 +188,20 @@ async function searchCards({ name = '', number = '', set = '', scope = 'database
   const offset = (Math.max(1, Number(page) || 1) - 1) * size;
   const selected = cards.slice(offset, offset + size);
   await cacheCards(selected);
-  return { cards: selected, total };
+  return { cards: await attachCachedPrices(selected), total };
 }
 async function getCardById(id) {
   const entry = loadSnapshot().entries.get(String(id));
   if (!entry) return null;
   const card = normalizeCard(entry.raw, entry.printing);
   await cacheCards([card]);
-  return card;
+  return (await attachCachedPrices([card]))[0];
 }
 async function getCardsBySet(set, lang = 'en') {
   if (!languages.isEnglish(lang)) return [];
   const cards = allCards().filter(card => matchesSet(card, [set]));
   await cacheCards(cards);
-  return cards;
+  return attachCachedPrices(cards);
 }
 async function listSets(lang = 'en') {
   if (!languages.isEnglish(lang)) return [];
@@ -184,10 +230,14 @@ async function cacheAllCards() {
   await cacheCards(cards);
   return cards;
 }
-async function updateCollectionPrices() {
-  // Deliberately no request and no price-history point: no licensed exact-printing
-  // provider has been approved for this snapshot.
-  return { price_status: 'unavailable', reason: PRICE_UNAVAILABLE };
+async function updateCollectionPrices(force = false) {
+  // Riftbound prices come from TCGCSV category 89 — TCGplayer's own Riftbound
+  // catalogue, via the same free mirror the Pokémon provider uses. The sweep lives in
+  // riftboundPrices.js because it needs a variant-preserving number key, a duplicate
+  // resolver and a Foil finish mapping that the Pokémon provider must NOT share; it is
+  // reached from here because every other game exposes its sweep on its provider
+  // module and server.js's hourly tick and boot catch-up both call this name.
+  return require('./riftboundPrices').updateCollectionPrices(force);
 }
 function localArtPath(imageUrl) {
   const match = String(imageUrl || '').match(/^\/api\/riftbound\/art\/([a-f0-9]{64})\.webp$/);

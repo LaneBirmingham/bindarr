@@ -12,7 +12,7 @@
   "duplicate_records_collapsed": 95,
   "image_count": 1171,
   "price_status": "unavailable",
-  "price_unavailable_reason": "No exact-printing price source with an approved licence has been verified.",
+  "price_unavailable_reason": "This snapshot carries printing identities only; prices come from the TCGCSV sweep once printings are cached.",
   "attribution": "Bindarr was created under Riot Games' \"Legal Jibber Jabber\" policy using assets owned by Riot Games. Riot Games does not endorse or sponsor this project.",
   "images": {
     "000de8bf5ca56515fb9bffa4ef1d7373a961c46f543fe169cd90090d33d598f5": {

@@ -109,7 +109,7 @@ function SharedCollection({ shareToken }) {
   );
 
   const topValuable = useMemo(
-    () => collection.filter(c => c.game !== 'riftbound' || c.market_value > 0).sort((a, b) => (b.price_trend || 0) - (a.price_trend || 0)).slice(0, 5),
+    () => collection.filter(c => c.game !== 'riftbound' || c.market_value > 0 || c.price_trend > 0).sort((a, b) => (b.price_trend || 0) - (a.price_trend || 0)).slice(0, 5),
     [collection]
   );
 

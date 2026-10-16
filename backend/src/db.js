@@ -462,6 +462,12 @@ async function initDb() {
   if (!appSettingsCols.some(c => c.name === 'lorcana_prices_swept_at')) {
     await run(`ALTER TABLE app_settings ADD COLUMN lorcana_prices_swept_at DATETIME`);
   }
+  // Riftbound gets its own clock. It sweeps a different catalogue entirely —
+  // TCGCSV category 89, walked group by group — and giving it the Pokémon gate
+  // would let a Pokémon sweep mark Riftbound as fresh for a day.
+  if (!appSettingsCols.some(c => c.name === 'riftbound_prices_swept_at')) {
+    await run(`ALTER TABLE app_settings ADD COLUMN riftbound_prices_swept_at DATETIME`);
+  }
 
   // VESTIGIAL. This gated non-admin members building an individual per-set ORB
   // index, and there are no per-set indexes any more — scanning is CollectorVision
